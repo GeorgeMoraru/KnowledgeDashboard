@@ -1,0 +1,7 @@
+{
+  "kb_root": "/DATA/Work/repos/KnowledgeBase",
+  "port": 7650,
+  "host": "0.0.0.0",
+  "proxy_prefix": "/kb",
+  "name": "Second Brain Knowledge Base"
+}

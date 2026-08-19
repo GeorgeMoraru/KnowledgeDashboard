@@ -13,6 +13,7 @@ import time
 import shutil
 import socket
 import logging
+import argparse
 import threading
 import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -27,23 +28,58 @@ logging.basicConfig(
 logger = logging.getLogger("kb_dashboard")
 
 DASHBOARD_DIR = os.path.dirname(os.path.abspath(__file__))
-# Check KB_ROOT_DIR from env or fallback paths
-env_kb_dir = os.environ.get("KB_ROOT_DIR")
+CONFIG_FILE = os.path.join(DASHBOARD_DIR, "config.json")
+
+# Load configuration file if present
+config_data = {}
+if os.path.isfile(CONFIG_FILE):
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+    except Exception as e:
+        logger.warning(f"Could not load config.json: {e}")
+
+# Resolve KB_ROOT_DIR from env, config, or default fallback
+env_kb_dir = os.environ.get("KB_ROOT_DIR") or config_data.get("kb_root")
 if env_kb_dir and os.path.exists(env_kb_dir):
     KB_ROOT_DIR = os.path.abspath(env_kb_dir)
 elif os.path.exists("/DATA/Work/repos/KnowledgeBase"):
     KB_ROOT_DIR = "/DATA/Work/repos/KnowledgeBase"
+elif os.path.exists(os.path.abspath(os.path.join(DASHBOARD_DIR, "..", "KnowledgeBase"))):
+    KB_ROOT_DIR = os.path.abspath(os.path.join(DASHBOARD_DIR, "..", "KnowledgeBase"))
 else:
     KB_ROOT_DIR = os.path.abspath(os.path.join(DASHBOARD_DIR, ".."))
 
-KNOWLEDGE_DIR = os.path.join(KB_ROOT_DIR, "knowledge")
+PORT = int(os.environ.get("KB_PORT") or config_data.get("port") or 7650)
+HOST = os.environ.get("KB_HOST") or config_data.get("host") or "0.0.0.0"
+PROXY_PREFIX = os.environ.get("PROXY_PREFIX") or config_data.get("proxy_prefix") or "/kb"
+
+def get_effective_knowledge_dir():
+    """Returns the directory containing markdown knowledge notes."""
+    sub_kb = os.path.join(KB_ROOT_DIR, "knowledge")
+    if os.path.isdir(sub_kb):
+        return sub_kb
+    return KB_ROOT_DIR
+
+KNOWLEDGE_DIR = get_effective_knowledge_dir()
 RAW_DIR = os.path.join(KB_ROOT_DIR, "raw")
 META_DIR = os.path.join(KB_ROOT_DIR, "meta")
 DATA_JS_FILE = os.path.join(DASHBOARD_DIR, "data.js")
 ACTIVITY_LOG_FILE = os.path.join(KB_ROOT_DIR, "meta", "activity_log.json")
 
-PORT = int(os.environ.get("KB_PORT", 7650))
-PROXY_PREFIX = "/kb"
+def set_kb_root(new_path: str):
+    """Dynamically switch the active Knowledge Base root."""
+    global KB_ROOT_DIR, KNOWLEDGE_DIR, RAW_DIR, META_DIR, ACTIVITY_LOG_FILE
+    abs_path = os.path.abspath(new_path)
+    if not os.path.isdir(abs_path):
+        raise ValueError(f"Knowledge Base directory not found: {new_path}")
+    KB_ROOT_DIR = abs_path
+    KNOWLEDGE_DIR = get_effective_knowledge_dir()
+    RAW_DIR = os.path.join(KB_ROOT_DIR, "raw")
+    META_DIR = os.path.join(KB_ROOT_DIR, "meta")
+    ACTIVITY_LOG_FILE = os.path.join(META_DIR, "activity_log.json")
+    discover_categories()
+    logger.info(f"Switched active Knowledge Base root to: {KB_ROOT_DIR} (knowledge dir: {KNOWLEDGE_DIR})")
 
 # Firebase Auth Configuration for Google Sign-In
 AUTH_CONFIG = {
@@ -64,7 +100,7 @@ SYNC_STATE = {
     "total_syncs": 0
 }
 
-# Display names only — styling colors live in styles.css
+# Base OOB category labels — extensible for any pluggable KB
 CATEGORY_CONFIG = {
     "general": {"name": "General"},
     "work": {"name": "Work"},
@@ -83,7 +119,7 @@ TOPIC_CONFIG = {
     "business-and-monetization": {"name": "Business & Monetization", "category": "general"},
     "business-and-strategy": {"name": "Business & Strategy", "category": "general"},
 
-    # Work Topics (BA Insight / SmartHub Platform)
+    # Work Topics
     "smarthub": {"name": "SmartHub", "category": "work"},
     "connectivity-hub": {"name": "Connectivity Hub", "category": "work"},
     "autoclassifier": {"name": "AutoClassifier", "category": "work"},
@@ -128,7 +164,7 @@ def record_activity(event_type, title, summary, source="System", note_id=None, r
     activities = load_activity_log()
     item = {
         "id": f"act_{int(time.time()*1000)}",
-        "type": event_type,  # 'ingest', 'newsletter', 'inbox', 'sync'
+        "type": event_type,
         "title": title,
         "summary": summary[:250] if summary else "",
         "source": source,
@@ -162,30 +198,63 @@ def initialize_recent_activities_if_empty(notes):
         save_activity_log(activities)
 
 
+def discover_categories():
+    """Dynamically discovers all categories and subfolders in the active knowledge base."""
+    k_dir = get_effective_knowledge_dir()
+    discovered = {}
+
+    # Seed with base known categories
+    for cat, cfg in CATEGORY_CONFIG.items():
+        discovered[cat] = cfg.copy()
+
+    if os.path.isdir(k_dir):
+        for entry in os.listdir(k_dir):
+            full_p = os.path.join(k_dir, entry)
+            if os.path.isdir(full_p) and not entry.startswith(".") and entry not in ["meta", "raw", "node_modules", ".git", ".gemini"]:
+                slug_cat = entry.lower()
+                if slug_cat not in discovered:
+                    display_name = entry.replace("-", " ").replace("_", " ").title()
+                    discovered[slug_cat] = {"name": display_name}
+
+    if not discovered:
+        discovered[DEFAULT_CATEGORY] = {"name": "General"}
+
+    CATEGORY_CONFIG.clear()
+    CATEGORY_CONFIG.update(discovered)
+    return discovered
+
+
 def resolve_topic(domain: str, category: str) -> str:
     """Display name for a domain folder."""
     for key, cfg in TOPIC_CONFIG.items():
         if key.lower() == domain.lower():
             return cfg["name"]
     if domain == category:
-        return CATEGORY_CONFIG.get(category, CATEGORY_CONFIG["general"])["name"]
+        return CATEGORY_CONFIG.get(category, {"name": category.replace("-", " ").replace("_", " ").title()})["name"]
     return domain.replace("-", " ").replace("_", " ").title()
 
 
 def note_folder(category: str, domain: str) -> str:
-    """Folder a note belongs in, relative to knowledge/."""
+    """Folder a note belongs in, relative to knowledge directory."""
     return category if not domain or domain == category else f"{category}/{domain}"
 
 
 def discover_domains():
     """Domain folders present under knowledge/<category>/."""
+    k_dir = get_effective_knowledge_dir()
+    cats = discover_categories()
     found = {}
-    for cat in CATEGORY_CONFIG:
-        cat_dir = os.path.join(KNOWLEDGE_DIR, cat)
-        found[cat] = sorted(
-            d for d in os.listdir(cat_dir)
-            if os.path.isdir(os.path.join(cat_dir, d))
-        ) if os.path.isdir(cat_dir) else []
+
+    for cat in cats:
+        cat_dir = os.path.join(k_dir, cat)
+        if os.path.isdir(cat_dir):
+            subdirs = [
+                d for d in os.listdir(cat_dir)
+                if os.path.isdir(os.path.join(cat_dir, d)) and not d.startswith(".") and d not in ["meta", "raw", "node_modules", ".git", ".gemini"]
+            ]
+            found[cat] = sorted(subdirs) if subdirs else [cat]
+        else:
+            found[cat] = [cat]
     return found
 
 
@@ -268,7 +337,9 @@ def set_frontmatter_value(content: str, key: str, value_str: str) -> str:
 
 
 def build_knowledge_data():
-    """Compiles all knowledge markdown notes, taxonomy, and graph without redundant bloat."""
+    """Compiles all knowledge markdown notes, taxonomy, and graph dynamically for any connected knowledge base."""
+    discover_categories()
+    k_dir = get_effective_knowledge_dir()
     notes = []
     domain_set = set()
     topic_domains = {}
@@ -276,21 +347,22 @@ def build_knowledge_data():
     tag_set = set()
     category_counts = {cat: 0 for cat in CATEGORY_CONFIG}
 
-    if not os.path.exists(KNOWLEDGE_DIR):
-        logger.warning(f"Knowledge directory not found: {KNOWLEDGE_DIR}")
+    if not os.path.exists(k_dir):
+        logger.warning(f"Knowledge directory not found: {k_dir}")
         return {"notes": [], "topics": [], "totalCount": 0}
 
-    for root, dirs, files in os.walk(KNOWLEDGE_DIR):
+    for root, dirs, files in os.walk(k_dir):
+        # Exclude hidden directories and special folders
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ["meta", "raw", "node_modules", ".git", ".gemini", "__pycache__"]]
+
         for f in files:
             if not f.endswith(".md"):
                 continue
 
             full_path = os.path.join(root, f)
             rel_path = os.path.relpath(full_path, KB_ROOT_DIR).replace("\\", "/")
-            parts = rel_path.split("/")
-
-            category = parts[1] if len(parts) > 1 and parts[1] in CATEGORY_CONFIG else DEFAULT_CATEGORY
-            domain = parts[2] if len(parts) > 3 else (parts[1] if len(parts) > 2 else category)
+            rel_to_k = os.path.relpath(full_path, k_dir).replace("\\", "/")
+            parts = rel_to_k.split("/")
 
             try:
                 with open(full_path, "r", encoding="utf-8", errors="replace") as file:
@@ -301,12 +373,41 @@ def build_knowledge_data():
 
             fm, body = parse_frontmatter(content)
 
+            # Determine category & domain dynamically:
+            category = (fm.get("category") or "").strip().lower()
+            domain = (fm.get("domain") or "").strip()
+
+            if not category:
+                if len(parts) > 1 and parts[0].lower() in CATEGORY_CONFIG:
+                    category = parts[0].lower()
+                elif len(parts) > 1:
+                    category = parts[0].lower()
+                else:
+                    category = DEFAULT_CATEGORY
+
+            if category not in CATEGORY_CONFIG:
+                CATEGORY_CONFIG[category] = {"name": category.replace("-", " ").replace("_", " ").title()}
+
+            if not domain:
+                if len(parts) > 2:
+                    domain = parts[1]
+                elif len(parts) == 2:
+                    domain = parts[0]
+                else:
+                    domain = category
+
+            if domain not in TOPIC_CONFIG:
+                TOPIC_CONFIG[domain] = {
+                    "name": domain.replace("-", " ").replace("_", " ").title(),
+                    "category": category
+                }
+
             title = fm.get("title")
             if not title:
                 h1_match = re.search(r"^#\s+(.+)$", body, re.MULTILINE)
                 title = h1_match.group(1).strip() if h1_match else f.replace(".md", "").replace("-", " ").title()
 
-            doc_type = fm.get("type", "note")
+            doc_type = fm.get("type", "concept")
             status = fm.get("status", "active")
             tags = fm.get("tags", [])
             if isinstance(tags, str):
@@ -329,9 +430,8 @@ def build_knowledge_data():
                 tag_set.add(t)
 
             category_counts[category] = category_counts.get(category, 0) + 1
-            note_id = rel_path.replace(".md", "").replace("/", "__")
+            note_id = rel_path.replace(".md", "").replace("/", "__").replace("\\", "__")
 
-            # Single body field to avoid payload bloat
             notes.append({
                 "id": note_id,
                 "filename": f,
@@ -439,6 +539,8 @@ def build_knowledge_data():
 
     payload = {
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "kbRoot": KB_ROOT_DIR,
+        "kbName": config_data.get("name") or os.path.basename(KB_ROOT_DIR),
         "stats": {
             "totalNotes": len(notes),
             "totalTopics": len(topics_list),
@@ -447,7 +549,7 @@ def build_knowledge_data():
             "totalEdges": len(edges),
             "categoryCounts": category_counts
         },
-        "categories": [{"id": cat, "name": cfg["name"]} for cat, cfg in CATEGORY_CONFIG.items()],
+        "categories": [{"id": cat, "name": cfg.get("name", cat.capitalize())} for cat, cfg in CATEGORY_CONFIG.items()],
         "categoryCounts": category_counts,
         "defaultCategory": DEFAULT_CATEGORY,
         "taxonomy": build_taxonomy(),
@@ -467,12 +569,12 @@ def build_knowledge_data():
     initialize_recent_activities_if_empty(notes)
 
     # Write out data.js for offline cached execution
-    breakdown = " | ".join(f"{CATEGORY_CONFIG[cat]['name']}: {count}" for cat, count in category_counts.items())
-    js_content = f"/**\n * SmartHub Knowledge Base - Compiled Data Payload\n * Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n * Total Assets: {len(notes)} | Topics: {len(topics_list)} | {breakdown}\n */\nwindow.KB_DATA = {json.dumps(payload, indent=2)};\n"
+    breakdown = " | ".join(f"{CATEGORY_CONFIG.get(cat, {}).get('name', cat.title())}: {count}" for cat, count in category_counts.items() if count > 0)
+    js_content = f"/**\n * SmartHub Knowledge Base - Compiled Data Payload\n * Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n * KB Root: {KB_ROOT_DIR}\n * Total Assets: {len(notes)} | Topics: {len(topics_list)} | {breakdown}\n */\nwindow.KB_DATA = {json.dumps(payload, indent=2)};\n"
     with open(DATA_JS_FILE, "w", encoding="utf-8") as f:
         f.write(js_content)
 
-    logger.info(f"Knowledge Base compiled: {len(notes)} notes across {len(topics_list)} topics.")
+    logger.info(f"Knowledge Base compiled: {len(notes)} notes across {len(topics_list)} topics (KB Root: {KB_ROOT_DIR}).")
     return payload
 
 
@@ -599,6 +701,9 @@ class KBServerHandler(BaseHTTPRequestHandler):
                 "port": PORT,
                 "service": "KnowledgeBase Dashboard",
                 "kb_root": KB_ROOT_DIR,
+                "kb_name": config_data.get("name") or os.path.basename(KB_ROOT_DIR),
+                "knowledge_dir": KNOWLEDGE_DIR,
+                "proxy_prefix": PROXY_PREFIX,
                 "last_sync": SYNC_STATE["last_sync_time"],
                 "is_syncing": SYNC_STATE["is_syncing"]
             })
@@ -810,6 +915,27 @@ class KBServerHandler(BaseHTTPRequestHandler):
         if path == "/api/rebuild":
             payload = build_knowledge_data()
             self.send_json(200, {"success": True, "message": "Knowledge data rebuilt", "total": payload["totalCount"]})
+            return
+
+        # API: Switch active Knowledge Base directory dynamically
+        if path == "/api/switch-kb":
+            new_path = req_data.get("path", "").strip()
+            if not new_path:
+                self.send_json(400, {"error": "Path is required"})
+                return
+            try:
+                set_kb_root(new_path)
+                payload = build_knowledge_data()
+                self.send_json(200, {
+                    "success": True,
+                    "message": f"Successfully connected to Knowledge Base at '{KB_ROOT_DIR}'",
+                    "kbRoot": KB_ROOT_DIR,
+                    "totalCount": payload["totalCount"],
+                    "categories": payload["categories"],
+                    "topics": payload["topics"]
+                })
+            except Exception as e:
+                self.send_json(500, {"error": str(e)})
             return
 
         # Mutation endpoints: Block if explicitly in guest mode
@@ -1262,4 +1388,23 @@ def run_server():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pluggable Knowledge Base Dashboard Server & PWA")
+    parser.add_argument("kb_path", nargs="?", default=None, help="Path to Knowledge Base root directory")
+    parser.add_argument("--kb-root", dest="kb_root", default=None, help="Path to Knowledge Base root directory")
+    parser.add_argument("--port", "-p", dest="port", type=int, default=None, help="Port to listen on (default: 7650)")
+    parser.add_argument("--host", "-H", dest="host", default=None, help="Host/IP to bind (default: 0.0.0.0)")
+    parser.add_argument("--proxy-prefix", dest="proxy_prefix", default=None, help="Tailscale / reverse proxy prefix (default: /kb)")
+    args = parser.parse_args()
+
+    target_kb = args.kb_root or args.kb_path or os.environ.get("KB_ROOT_DIR") or config_data.get("kb_root")
+    if target_kb:
+        set_kb_root(target_kb)
+
+    if args.port:
+        PORT = args.port
+    if args.host:
+        HOST = args.host
+    if args.proxy_prefix:
+        PROXY_PREFIX = args.proxy_prefix
+
     run_server()
