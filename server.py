@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Knowledge Base Dashboard Server & Sync Engine
+Knowledge Base Dashboard Server, Sync Engine & Notification Hub
 Serves the Knowledge Base Web App / PWA on port 7650 (and via Tailscale /kb route).
-Handles data compilation, Google Drive auto-sync, raw inbox ingestion, and API routes.
+Handles data compilation, Google Drive auto-sync, notification tracking, and guest mode security.
 """
 
 import os
@@ -38,6 +38,7 @@ KNOWLEDGE_DIR = os.path.join(KB_ROOT_DIR, "knowledge")
 RAW_DIR = os.path.join(KB_ROOT_DIR, "raw")
 META_DIR = os.path.join(KB_ROOT_DIR, "meta")
 DATA_JS_FILE = os.path.join(DASHBOARD_DIR, "data.js")
+ACTIVITY_LOG_FILE = os.path.join(KB_ROOT_DIR, "meta", "activity_log.json")
 
 PORT = int(os.environ.get("KB_PORT", 7650))
 PROXY_PREFIX = "/kb"
@@ -97,6 +98,66 @@ TOPIC_CONFIG = {
     # Flat category
     "prompt-engineering": {"name": "Prompt Engineering", "category": "prompt-engineering"}
 }
+
+
+def load_activity_log():
+    """Loads activity / notification log from disk."""
+    if os.path.exists(ACTIVITY_LOG_FILE):
+        try:
+            with open(ACTIVITY_LOG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def save_activity_log(activities):
+    """Saves activity / notification log to disk, keeping the latest 50 entries."""
+    try:
+        os.makedirs(os.path.dirname(ACTIVITY_LOG_FILE), exist_ok=True)
+        with open(ACTIVITY_LOG_FILE, "w", encoding="utf-8") as f:
+            json.dump(activities[:50], f, indent=2)
+    except Exception as e:
+        logger.warning(f"Could not save activity log: {e}")
+
+
+def record_activity(event_type, title, summary, source="System", note_id=None, rel_path=None):
+    """Appends a new event to the activity notification log."""
+    activities = load_activity_log()
+    item = {
+        "id": f"act_{int(time.time()*1000)}",
+        "type": event_type,  # 'ingest', 'newsletter', 'inbox', 'sync'
+        "title": title,
+        "summary": summary[:250] if summary else "",
+        "source": source,
+        "noteId": note_id or "",
+        "relPath": rel_path or "",
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "timeAgo": "Just now"
+    }
+    activities.insert(0, item)
+    save_activity_log(activities)
+    return item
+
+
+def initialize_recent_activities_if_empty(notes):
+    """Seed activity log from existing recent notes if empty."""
+    activities = load_activity_log()
+    if not activities and notes:
+        sorted_notes = sorted(notes, key=lambda n: n.get("updated") or n.get("created") or "", reverse=True)
+        for n in sorted_notes[:10]:
+            activities.append({
+                "id": f"act_{n['id']}",
+                "type": "ingest" if "newsletter" not in n.get("tags", []) else "newsletter",
+                "title": n["title"],
+                "summary": n.get("summary", ""),
+                "source": "Knowledge Base Intake",
+                "noteId": n["id"],
+                "relPath": n.get("relPath", ""),
+                "timestamp": n.get("updated") or n.get("created") or time.strftime("%Y-%m-%d %H:%M:%S"),
+                "timeAgo": "Recently"
+            })
+        save_activity_log(activities)
 
 
 def resolve_topic(domain: str, category: str) -> str:
@@ -400,7 +461,10 @@ def build_knowledge_data():
         "totalCount": len(notes)
     }
 
-    # Write out data.js for ultra-fast offline cached execution
+    # Initialize activity log if needed
+    initialize_recent_activities_if_empty(notes)
+
+    # Write out data.js for offline cached execution
     breakdown = " | ".join(f"{CATEGORY_CONFIG[cat]['name']}: {count}" for cat, count in category_counts.items())
     js_content = f"/**\n * SmartHub Knowledge Base - Compiled Data Payload\n * Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n * Total Assets: {len(notes)} | Topics: {len(topics_list)} | {breakdown}\n */\nwindow.KB_DATA = {json.dumps(payload, indent=2)};\n"
     with open(DATA_JS_FILE, "w", encoding="utf-8") as f:
@@ -429,6 +493,18 @@ def trigger_sync():
             sys.path.insert(0, os.path.dirname(sync_script))
             import kb_sync_inbox
             res = kb_sync_inbox.run_full_sync()
+
+            # Record sync activity if new items were consumed or articles found
+            consumed = res.get("inbox", {}).get("consumed", 0)
+            feeds = res.get("feeds", {}).get("new_articles", 0)
+            synced = res.get("notebooks", {}).get("new_synced", 0)
+            if consumed > 0 or feeds > 0 or synced > 0:
+                record_activity(
+                    "sync",
+                    f"Google Drive Sync ({consumed} inboxed, {feeds} feeds, {synced} synced)",
+                    f"Automated ingestion processed {consumed} raw items and {feeds} newsletter articles.",
+                    "Google Drive Sync Engine"
+                )
         else:
             logger.warning(f"Sync script not found at {sync_script}")
             res = {"error": "Sync script not found"}
@@ -436,7 +512,6 @@ def trigger_sync():
         logger.error(f"Sync exception: {e}")
         res = {"error": str(e)}
     finally:
-        # Always recompile dataset after sync
         try:
             build_knowledge_data()
         except Exception as e:
@@ -459,13 +534,13 @@ def trigger_sync():
 
 def background_sync_worker():
     """Periodic worker syncing Google Drive and feeds every 5 minutes."""
-    time.sleep(10) # Initial brief delay
+    time.sleep(10)
     while True:
         try:
             trigger_sync()
         except Exception as e:
             logger.error(f"Background sync error: {e}")
-        time.sleep(300) # 5 minutes interval
+        time.sleep(300)
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -480,7 +555,7 @@ class KBServerHandler(BaseHTTPRequestHandler):
     def send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-User-Email, X-User-Role")
 
     def send_json(self, status, payload):
         body = json.dumps(payload).encode("utf-8")
@@ -522,6 +597,16 @@ class KBServerHandler(BaseHTTPRequestHandler):
         # API: Auth Configuration
         if path in ["/api/config/auth", "/api/config/kb", "/api/config"]:
             self.send_json(200, AUTH_CONFIG)
+            return
+
+        # API: Activity / Ingestion Notifications
+        if path in ["/api/notifications", "/api/activity"]:
+            activities = load_activity_log()
+            self.send_json(200, {
+                "notifications": activities,
+                "total": len(activities),
+                "last_sync": SYNC_STATE["last_sync_time"]
+            })
             return
 
         # API: Sync Status
@@ -632,6 +717,10 @@ class KBServerHandler(BaseHTTPRequestHandler):
         except Exception:
             req_data = {}
 
+        # Guest mode restriction check on mutation endpoints
+        user_role = self.headers.get("X-User-Role", "").lower()
+        is_guest_req = req_data.get("is_guest", False) or user_role == "guest"
+
         # API: Trigger Google Drive Sync & Feed Ingestion
         if path == "/api/sync":
             threading.Thread(target=trigger_sync, daemon=True).start()
@@ -648,6 +737,15 @@ class KBServerHandler(BaseHTTPRequestHandler):
             self.send_json(200, {"success": True, "message": "Knowledge data rebuilt", "total": payload["totalCount"]})
             return
 
+        # Mutation endpoints: Block if explicitly in guest mode
+        if path in ["/api/update-tags", "/api/move-topic", "/api/ingest"]:
+            if is_guest_req:
+                self.send_json(403, {
+                    "error": "Guest Mode is read-only. Please sign in with Google to manipulate or ingest data.",
+                    "code": "GUEST_READ_ONLY"
+                })
+                return
+
         # API: Rewrite a note's frontmatter tags in place
         if path == "/api/update-tags":
             target = safe_join(KB_ROOT_DIR, req_data.get("relPath", ""))
@@ -661,6 +759,7 @@ class KBServerHandler(BaseHTTPRequestHandler):
                 with open(target, "w", encoding="utf-8") as f:
                     f.write(set_frontmatter_value(content, "tags", json.dumps(tags)))
                 payload = build_knowledge_data()
+                record_activity("tag_update", f"Updated tags on {os.path.basename(target)}", f"New tags: {', '.join(tags)}", "User Edit")
                 self.send_json(200, {"success": True, "message": "Tags updated", "tags": tags})
             except Exception as e:
                 self.send_json(500, {"error": str(e)})
@@ -738,12 +837,15 @@ class KBServerHandler(BaseHTTPRequestHandler):
                         logger.warning(f"Could not move raw file to archive: {e}")
 
             rel_target = os.path.relpath(target_file, KB_ROOT_DIR).replace("\\", "/")
+            note_id = rel_target.replace(".md", "").replace("/", "__")
+            record_activity("ingest", title, summary or "New synthesized note", "Manual Ingest", note_id, rel_target)
             logger.info(f"Ingested note: {rel_target}")
 
             self.send_json(200, {
                 "success": True,
                 "message": f"Successfully ingested '{title}'",
                 "path": rel_target,
+                "noteId": note_id,
                 "totalCount": updated_payload["totalCount"]
             })
             return

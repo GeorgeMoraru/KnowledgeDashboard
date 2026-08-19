@@ -1,20 +1,20 @@
 /**
  * SmartHub Knowledge Base - Compiled Data Payload
- * Generated: 2026-08-19 09:25:36
- * Total Assets: 124 | Topics: 18 | General: 36 | Work: 71 | Projects: 11 | Prompt Engineering: 6
+ * Generated: 2026-08-19 09:29:35
+ * Total Assets: 125 | Topics: 18 | General: 36 | Work: 71 | Projects: 12 | Prompt Engineering: 6
  */
 window.KB_DATA = {
-  "generatedAt": "2026-08-19T06:25:36Z",
+  "generatedAt": "2026-08-19T06:29:35Z",
   "stats": {
-    "totalNotes": 124,
+    "totalNotes": 125,
     "totalTopics": 18,
     "totalTypes": 5,
-    "totalTags": 41,
-    "totalEdges": 398,
+    "totalTags": 44,
+    "totalEdges": 399,
     "categoryCounts": {
       "general": 36,
       "work": 71,
-      "projects": 11,
+      "projects": 12,
       "prompt-engineering": 6
     }
   },
@@ -39,7 +39,7 @@ window.KB_DATA = {
   "categoryCounts": {
     "general": 36,
     "work": 71,
-    "projects": 11,
+    "projects": 12,
     "prompt-engineering": 6
   },
   "defaultCategory": "general",
@@ -189,6 +189,7 @@ window.KB_DATA = {
     "mobile-apps",
     "moc",
     "monetization",
+    "notifications",
     "ocr",
     "pantry-tracking",
     "portfolio",
@@ -200,8 +201,10 @@ window.KB_DATA = {
     "roadmap",
     "skill",
     "software-engineering",
+    "spec",
     "specification",
     "subscriptions",
+    "sync",
     "technical-spec",
     "vite",
     "web"
@@ -444,6 +447,31 @@ window.KB_DATA = {
       "related": [],
       "wordCount": 233,
       "body": "\ufeff---\ntitle: \"AutoClassifier Pipeline Architecture & Stages\"\ndomain: \"autoclassifier\"\ncategory: \"work\"\ntype: \"architecture\"\ntags: [\"autoclassifier\", \"pipeline\", \"enrichment\", \"stages\", \"nlp\", \"ai\"]\ncreated: 2026-08-18\nupdated: 2026-08-18\nstatus: active\nsummary: \"Architecture of the AutoClassifier multi-stage content enrichment pipeline, stage execution order, configuration files, and extension hooks.\"\nrelated:\n  - \"[[INDEX]]\"\n  - \"[[execute-components-reference.md]]\"\n  - \"[[taxonomy-and-classification-rules.md]]\"\n  - \"[[entity-extraction-and-nlp.md]]\"\n---\n\n# AutoClassifier Pipeline Architecture & Stages\n\nAutoClassifier is an automated content enrichment engine that processes documents during crawl time, extracting entities, classifying topics against hierarchical taxonomies, generating dense vector embeddings, and creating structured metadata.\n\n---\n\n## 1. Multi-Stage Pipeline Execution\n\n```mermaid\ngraph TD\n    A[\"Raw Document from Crawler\"] --> B[\"Stage 1: Document Parsing & Text Extraction\"]\n    B --> C[\"Stage 2: Chunking & Slide/TOC Splitting\"]\n    C --> D[\"Stage 3: NLP & Named Entity Recognition (NER)\"]\n    D --> E[\"Stage 4: Taxonomy Classification & Rule Engine\"]\n    E --> F[\"Stage 5: Vector Embedding Generation\"]\n    F --> G[\"Stage 6: Metadata Normalization & Output Formatting\"]\n    G --> H[\"Downstream Search Engine Indexer\"]\n```\n\n---\n\n## 2. Configuration & Stage Definitions\n\nPipeline stages are defined in `AutoClassifier.config` or XML pipeline definitions:\n\n```xml\n<AutoClassifierPipeline>\n  <Stages>\n    <Stage name=\"ParserStage\" type=\"BAInsight.AutoClassifier.Stages.DocumentParserStage\" enabled=\"true\">\n      <Property name=\"ExtractImages\" value=\"false\" />\n      <Property name=\"MaxContentLengthBytes\" value=\"52428800\" />\n    </Stage>\n\n    <Stage name=\"SlideTitleExtractorStage\" type=\"BAInsight.AutoClassifier.Stages.SlideTitleExtractor\" enabled=\"true\">\n      <Property name=\"ExtractSlideNotes\" value=\"true\" />\n      <Property name=\"MinWordsForHeading\" value=\"3\" />\n    </Stage>\n\n    <Stage name=\"EntityExtractionStage\" type=\"BAInsight.AutoClassifier.Stages.EntityExtractorStage\" enabled=\"true\">\n      <Property name=\"ModelPath\" value=\"models/ner-en-general.bin\" />\n      <Property name=\"ConfidenceThreshold\" value=\"0.75\" />\n    </Stage>\n\n    <Stage name=\"TaxonomyRuleStage\" type=\"BAInsight.AutoClassifier.Stages.RuleClassifierStage\" enabled=\"true\">\n      <Property name=\"TaxonomyFile\" value=\"taxonomies/LegalMasterTaxonomy.xml\" />\n      <Property name=\"MultiCategoryMatch\" value=\"true\" />\n    </Stage>\n  </Stages>\n</AutoClassifierPipeline>\n```\n"
+    },
+    {
+      "id": "knowledge__projects__skills__autonomous-second-brain-sync-spec",
+      "filename": "autonomous-second-brain-sync-spec.md",
+      "relPath": "knowledge/projects/skills/autonomous-second-brain-sync-spec.md",
+      "path": "knowledge/projects/skills/autonomous-second-brain-sync-spec.md",
+      "title": "Autonomous Second Brain Sync Spec",
+      "category": "projects",
+      "categoryName": "Projects",
+      "domain": "skills",
+      "topic": "SOPs & Skills",
+      "topicName": "SOPs & Skills",
+      "type": "spec",
+      "status": "active",
+      "created": "2026-08-19",
+      "updated": "2026-08-19",
+      "summary": "Architectural specification for autonomous second brain sync and notification streams.",
+      "tags": [
+        "sync",
+        "notifications",
+        "spec"
+      ],
+      "related": "",
+      "wordCount": 16,
+      "body": "# Autonomous Second Brain Sync Spec\n\n## Overview\nDetails on multi-device notifications and guest access controls."
     },
     {
       "id": "knowledge__work__smarthub__azure-hybrid-search",
@@ -3230,6 +3258,25 @@ window.KB_DATA = {
         "isHub": false
       },
       {
+        "id": "knowledge__projects__skills__autonomous-second-brain-sync-spec",
+        "name": "Autonomous Second Brain Sync Spec",
+        "label": "Autonomous Second Brai\u2026",
+        "type": "spec",
+        "topic": "SOPs & Skills",
+        "domain": "skills",
+        "category": "projects",
+        "noteId": "knowledge__projects__skills__autonomous-second-brain-sync-spec",
+        "relPath": "knowledge/projects/skills/autonomous-second-brain-sync-spec.md",
+        "tags": [
+          "sync",
+          "notifications",
+          "spec"
+        ],
+        "summary": "Architectural specification for autonomous second brain sync and notification streams.",
+        "radius": 11,
+        "isHub": false
+      },
+      {
         "id": "knowledge__work__smarthub__azure-hybrid-search",
         "name": "Azure Hybrid Search (Vector + Keyword) MVP",
         "label": "Azure Hybrid Search (V\u2026",
@@ -5045,6 +5092,12 @@ window.KB_DATA = {
       {
         "source": "topic__AutoClassifier",
         "target": "knowledge__work__autoclassifier__pipeline-architecture-and-stages",
+        "type": "hierarchy",
+        "value": 1
+      },
+      {
+        "source": "topic__SOPs_&_Skills",
+        "target": "knowledge__projects__skills__autonomous-second-brain-sync-spec",
         "type": "hierarchy",
         "value": 1
       },
@@ -7372,5 +7425,5 @@ window.KB_DATA = {
       }
     ]
   },
-  "totalCount": 124
+  "totalCount": 125
 };

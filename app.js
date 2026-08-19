@@ -1123,9 +1123,29 @@
   // Tag Editor Rendering & Management
   // =========================================================================
 
+  function isGuestMode() {
+    return !window.CURRENT_USER;
+  }
+
   function renderModalTags(note) {
     if (!el.modalTagEditor) return;
+    const isGuest = isGuestMode();
     const tags = note.tags || [];
+    
+    if (isGuest) {
+      const tagsHtml = tags.map(tg => `
+        <span class="sh-tag-edit-pill">
+          #${escapeHtml(tg)}
+        </span>
+      `).join('');
+      el.modalTagEditor.innerHTML = `
+        <span class="sh-tag-editor-label">Tags:</span>
+        ${tagsHtml || '<span style="color:var(--text-muted); font-size:12px;">No tags</span>'}
+        <span style="font-size:11px; color:var(--text-muted); margin-left:6px;">🔒 (Sign in to edit tags)</span>
+      `;
+      return;
+    }
+
     const tagsHtml = tags.map(tg => `
       <span class="sh-tag-edit-pill">
         #${escapeHtml(tg)}
@@ -1707,6 +1727,11 @@ INGESTION INSTRUCTIONS:
   };
 
   window.openIngestModal = function () {
+    if (isGuestMode()) {
+      showToast('🔒 Ingestion requires signing in. Please sign in with Google.', 3500);
+      window.handleGoogleLogin();
+      return;
+    }
     const modal = document.getElementById('ingestModal');
     if (modal) {
       modal.classList.add('active');
@@ -1957,7 +1982,7 @@ related:
   };
 
   /* ==========================================================================
-     Google Authentication Controller
+     Google Authentication & Guest Mode Controller
      ========================================================================== */
 
   function updateAuthUI(user) {
@@ -1967,10 +1992,14 @@ related:
     const displayName = document.getElementById('userDisplayName');
     const menuName = document.getElementById('userMenuName');
     const menuEmail = document.getElementById('userMenuEmail');
+    const guestPill = document.getElementById('guestModeIndicator');
+    const ingestLabel = document.getElementById('ingestBtnLabel');
 
     if (user) {
       if (signInBtn) signInBtn.classList.add('hidden');
       if (profileChip) profileChip.classList.remove('hidden');
+      if (guestPill) guestPill.classList.add('hidden');
+      if (ingestLabel) ingestLabel.textContent = 'Ingest';
       if (avatarImg) {
         avatarImg.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'User')}&background=8b5cf6&color=fff`;
       }
@@ -1981,8 +2010,14 @@ related:
     } else {
       if (signInBtn) signInBtn.classList.remove('hidden');
       if (profileChip) profileChip.classList.add('hidden');
+      if (guestPill) guestPill.classList.remove('hidden');
+      if (ingestLabel) ingestLabel.textContent = '🔒 Ingest';
       const menuDropdown = document.getElementById('userMenuDropdown');
       if (menuDropdown) menuDropdown.classList.add('hidden');
+    }
+
+    if (state.currentNote) {
+      renderModalTags(state.currentNote);
     }
   }
 
@@ -2001,7 +2036,7 @@ related:
     if (window.KBAuth) {
       try {
         await window.KBAuth.logout();
-        showToast('Signed out successfully.', 2500);
+        showToast('Signed out successfully. Switched to Guest Mode.', 2500);
       } catch (err) {
         console.error('Logout error:', err);
       }
@@ -2019,11 +2054,120 @@ related:
     if (dropdown && !dropdown.classList.contains('hidden')) {
       dropdown.classList.add('hidden');
     }
+    const notifDropdown = document.getElementById('notifPanelDropdown');
+    if (notifDropdown && !notifDropdown.classList.contains('hidden')) {
+      notifDropdown.classList.add('hidden');
+    }
   });
 
   window.addEventListener('kb:auth_changed', (e) => {
     updateAuthUI(e.detail ? e.detail.user : null);
   });
+
+  /* ==========================================================================
+     Notification System Controller
+     ========================================================================== */
+
+  let unreadNotificationsCount = 0;
+  let cachedNotifications = [];
+
+  window.toggleNotificationPanel = function (e) {
+    if (e) e.stopPropagation();
+    const dropdown = document.getElementById('notifPanelDropdown');
+    if (dropdown) {
+      const isOpening = dropdown.classList.contains('hidden');
+      dropdown.classList.toggle('hidden');
+      if (isOpening) {
+        fetchNotifications();
+      }
+    }
+  };
+
+  window.markAllNotificationsRead = function () {
+    unreadNotificationsCount = 0;
+    const badge = document.getElementById('notifBadge');
+    if (badge) badge.classList.add('hidden');
+    try {
+      localStorage.setItem('kb_notifs_last_read', String(Date.now()));
+    } catch (e) {}
+    showToast('✓ All notifications marked as read', 2000);
+  };
+
+  async function fetchNotifications() {
+    try {
+      const res = await fetch('./api/notifications');
+      if (res.ok) {
+        const data = await res.json();
+        cachedNotifications = data.notifications || [];
+        renderNotifications(cachedNotifications);
+      }
+    } catch (e) {
+      console.warn('Could not load notifications:', e);
+    }
+  }
+
+  function renderNotifications(notifs) {
+    const listEl = document.getElementById('notifList');
+    const badge = document.getElementById('notifBadge');
+    if (!listEl) return;
+
+    if (!notifs || notifs.length === 0) {
+      listEl.innerHTML = '<div class="notif-empty">No new ingestions or activity recorded yet.</div>';
+      if (badge) badge.classList.add('hidden');
+      return;
+    }
+
+    let lastReadTime = 0;
+    try {
+      lastReadTime = parseInt(localStorage.getItem('kb_notifs_last_read') || '0', 10);
+    } catch (e) {}
+
+    let unreadCount = 0;
+    const itemsHtml = notifs.map(n => {
+      let badgeClass = '';
+      let badgeText = n.type || 'Ingest';
+      if (n.type === 'newsletter') {
+        badgeClass = 'badge-newsletter';
+        badgeText = 'Newsletter';
+      } else if (n.type === 'sync') {
+        badgeClass = 'badge-sync';
+        badgeText = 'Drive Sync';
+      }
+
+      const itemTimeMs = new Date(n.timestamp).getTime() || Date.now();
+      if (itemTimeMs > lastReadTime) unreadCount++;
+
+      return `
+        <div class="notif-item" onclick="window.openNotificationNote('${escapeHtml(n.noteId || '')}')">
+          <div class="notif-item-top">
+            <span class="notif-item-badge ${badgeClass}">${badgeText}</span>
+            <span class="notif-item-time">${escapeHtml(n.timestamp || '')}</span>
+          </div>
+          <div class="notif-item-title">${escapeHtml(n.title || 'Note')}</div>
+          <div class="notif-item-summary">${escapeHtml(n.summary || '')}</div>
+        </div>
+      `;
+    }).join('');
+
+    listEl.innerHTML = itemsHtml;
+
+    if (badge) {
+      if (unreadCount > 0) {
+        badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+  }
+
+  window.openNotificationNote = function (noteId) {
+    const notifDropdown = document.getElementById('notifPanelDropdown');
+    if (notifDropdown) notifDropdown.classList.add('hidden');
+    if (noteId) {
+      window.openNoteById(noteId);
+    }
+  };
 
   /* ==========================================================================
      Google Drive & Ingestion Sync Controller
@@ -2047,6 +2191,7 @@ related:
             window.KB_DATA = await notesRes.json();
             loadData();
           }
+          fetchNotifications();
         } catch (e) {}
 
         if (btn) btn.classList.remove('syncing');
@@ -2096,6 +2241,7 @@ related:
 
   document.addEventListener('DOMContentLoaded', () => {
     init();
+    fetchNotifications();
     if (window.KBAuth) {
       const user = window.KBAuth.getCurrentUser();
       updateAuthUI(user);
