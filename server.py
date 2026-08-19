@@ -669,7 +669,7 @@ class KBServerHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-User-Email, X-User-Role")
 
-    def send_json(self, status, payload):
+    def send_json(self, status, payload, send_body=True):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -677,7 +677,8 @@ class KBServerHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_cors_headers()
         self.end_headers()
-        self.wfile.write(body)
+        if send_body:
+            self.wfile.write(body)
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -721,7 +722,7 @@ class KBServerHandler(BaseHTTPRequestHandler):
                             cfg = remote_cfg
             except Exception:
                 pass
-            self.send_json(200, cfg)
+            self.send_json(200, cfg, send_body=send_body)
             return
 
         # API: Activity / Ingestion Notifications
@@ -731,7 +732,7 @@ class KBServerHandler(BaseHTTPRequestHandler):
                 "notifications": activities,
                 "total": len(activities),
                 "last_sync": SYNC_STATE["last_sync_time"]
-            })
+            }, send_body=send_body)
             return
 
         # API: Sync Status
@@ -741,12 +742,12 @@ class KBServerHandler(BaseHTTPRequestHandler):
                 "is_syncing": SYNC_STATE["is_syncing"],
                 "total_syncs": SYNC_STATE["total_syncs"],
                 "last_result": SYNC_STATE["last_sync_result"]
-            })
+            }, send_body=send_body)
             return
 
         # API: Get compiled notes payload
         if path == "/api/notes":
-            self.send_json(200, build_knowledge_data())
+            self.send_json(200, build_knowledge_data(), send_body=send_body)
             return
 
         # API: List Raw Inbox Files
