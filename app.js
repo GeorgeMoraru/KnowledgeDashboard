@@ -115,6 +115,7 @@
 
   function cacheDom() {
     el.searchInput = document.getElementById('searchInput');
+    el.searchModePill = document.getElementById('searchModePill');
     el.searchClear = document.getElementById('searchClear');
     el.topicScopeSelect = document.getElementById('topicScopeSelect');
     el.topicFacetList = document.getElementById('topicFacetList');
@@ -138,8 +139,10 @@
     el.activeFilters = document.getElementById('activeFilters');
     el.shareTopicBtn = document.getElementById('shareTopicBtn');
     el.shareTopicBtnLabel = document.getElementById('shareTopicBtnLabel');
+    el.deleteTopicBtn = document.getElementById('deleteTopicBtn');
+    el.deleteTopicBtnLabel = document.getElementById('deleteTopicBtnLabel');
 
-    // Note Modal
+    // Note Modal & Drawer Panes
     el.modalBackdrop = document.getElementById('noteModal');
     el.modalClose = document.getElementById('modalClose');
     el.modalTitle = document.getElementById('modalTitle');
@@ -147,10 +150,43 @@
     el.modalMeta = document.getElementById('modalMeta');
     el.modalTagEditor = document.getElementById('modalTagEditor');
     el.modalBody = document.getElementById('modalBody');
+    el.modalBodyEdit = document.getElementById('modalBodyEdit');
+    el.modalBodyHistory = document.getElementById('modalBodyHistory');
+    el.modalViewFooter = document.getElementById('modalViewFooter');
     el.modalRelated = document.getElementById('modalRelated');
     el.copyPathBtn = document.getElementById('copyPathBtn');
     el.modalShareBtn = document.getElementById('modalShareBtn');
+    el.modalDeleteHeaderBtn = document.getElementById('modalDeleteHeaderBtn');
+    el.modalDeleteFooterBtn = document.getElementById('modalDeleteFooterBtn');
     el.modalShareFooterBtn = document.getElementById('modalShareFooterBtn');
+
+    // Note Editor Fields
+    el.noteEditTitle = document.getElementById('noteEditTitle');
+    el.noteEditSummary = document.getElementById('noteEditSummary');
+    el.noteEditType = document.getElementById('noteEditType');
+    el.noteEditContent = document.getElementById('noteEditContent');
+    el.noteEditWordCount = document.getElementById('noteEditWordCount');
+    el.historyCommitsList = document.getElementById('historyCommitsList');
+    el.historyDiffViewer = document.getElementById('historyDiffViewer');
+
+    // Quick Note Modal Elements
+    el.quickNoteModal = document.getElementById('quickNoteModal');
+    el.quickNoteTitle = document.getElementById('quickNoteTitle');
+    el.quickNoteCategory = document.getElementById('quickNoteCategory');
+    el.quickNoteDomain = document.getElementById('quickNoteDomain');
+    el.quickNoteType = document.getElementById('quickNoteType');
+    el.quickNoteTags = document.getElementById('quickNoteTags');
+    el.quickNoteSummary = document.getElementById('quickNoteSummary');
+    el.quickNoteContent = document.getElementById('quickNoteContent');
+
+    // Confirm Modal Elements
+    el.confirmModal = document.getElementById('confirmModal');
+    el.confirmModalClose = document.getElementById('confirmModalClose');
+    el.confirmModalTitle = document.getElementById('confirmModalTitle');
+    el.confirmModalBadge = document.getElementById('confirmModalBadge');
+    el.confirmModalMessage = document.getElementById('confirmModalMessage');
+    el.confirmModalPreview = document.getElementById('confirmModalPreview');
+    el.confirmModalSubmitBtn = document.getElementById('confirmModalSubmitBtn');
 
     // Share Modal Elements
     el.shareModal = document.getElementById('shareModal');
@@ -468,25 +504,35 @@
       }).filter(t => state.selectedCategory === 'all' || t.count > 0);
 
       let topicListHtml = `
-        <button class="nav-topic-item ${state.selectedTopic === 'All' ? 'active' : ''}" onclick="window.selectTopic('All')">
-          <div class="nav-topic-left">
-            <span class="topic-dot"></span>
-            <span class="topic-name">All Topics</span>
-          </div>
-          <span class="nav-topic-badge">${catFilteredNotes.length}</span>
-        </button>
+        <div class="nav-topic-row ${state.selectedTopic === 'All' ? 'active' : ''}">
+          <button class="nav-topic-item ${state.selectedTopic === 'All' ? 'active' : ''}" onclick="window.selectTopic('All')">
+            <div class="nav-topic-left">
+              <span class="topic-dot"></span>
+              <span class="topic-name">All Topics</span>
+            </div>
+            <span class="nav-topic-badge">${catFilteredNotes.length}</span>
+          </button>
+        </div>
       `;
 
       allAvailableTopics.forEach(t => {
         const isActive = state.selectedTopic === t.name;
         topicListHtml += `
-          <button class="nav-topic-item ${isActive ? 'active' : ''}" onclick="window.selectTopic('${escapeHtml(t.name)}')">
-            <div class="nav-topic-left">
-              <span class="topic-dot" style="--topic-accent:${t.color};"></span>
-              <span class="topic-name">${escapeHtml(t.name)}</span>
-            </div>
-            <span class="nav-topic-badge">${t.count}</span>
-          </button>
+          <div class="nav-topic-row ${isActive ? 'active' : ''}">
+            <button class="nav-topic-item ${isActive ? 'active' : ''}" onclick="window.selectTopic('${escapeHtml(t.name)}')">
+              <div class="nav-topic-left">
+                <span class="topic-dot" style="--topic-accent:${t.color};"></span>
+                <span class="topic-name">${escapeHtml(t.name)}</span>
+              </div>
+              <span class="nav-topic-badge">${t.count}</span>
+            </button>
+            <button class="topic-delete-icon-btn" onclick="event.stopPropagation(); window.promptDeleteTopic('${escapeHtml(t.name)}')" title="Delete Topic '${escapeHtml(t.name)}'">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
         `;
       });
 
@@ -570,6 +616,15 @@
     // Update Share Topic button label
     if (el.shareTopicBtnLabel) {
       el.shareTopicBtnLabel.textContent = state.selectedTopic === 'All' ? 'Share All Topics' : `Share ${state.selectedTopic}`;
+    }
+
+    // Update Delete Topic button visibility and label
+    if (el.deleteTopicBtn) {
+      const hasTopic = state.selectedTopic && state.selectedTopic !== 'All';
+      el.deleteTopicBtn.classList.toggle('hidden', !hasTopic);
+      if (el.deleteTopicBtnLabel && hasTopic) {
+        el.deleteTopicBtnLabel.textContent = `Delete ${state.selectedTopic}`;
+      }
     }
   }
 
@@ -670,11 +725,15 @@
 
     // Keyboard shortcut: '/' focuses search, 'Escape' closes modal/search
     window.addEventListener('keydown', (e) => {
-      if (e.key === '/' && document.activeElement !== el.searchInput && !state.currentNote && !isShareModalOpen()) {
+      if (e.key === '/' && document.activeElement !== el.searchInput && !document.activeElement.matches('input, textarea') && !state.currentNote && !isShareModalOpen() && !isConfirmModalOpen() && !isQuickNoteModalOpen()) {
         e.preventDefault();
         el.searchInput.focus();
       } else if (e.key === 'Escape') {
-        if (isShareModalOpen()) {
+        if (isConfirmModalOpen()) {
+          window.closeConfirmModal();
+        } else if (isQuickNoteModalOpen()) {
+          window.closeQuickNoteModal();
+        } else if (isShareModalOpen()) {
           window.closeShareModal();
         } else if (state.currentNote) {
           closeModal();
@@ -688,6 +747,25 @@
       }
     });
 
+    // Editor tab indentation support
+    const handleTextareaTab = (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = e.target.selectionStart;
+        const end = e.target.selectionEnd;
+        e.target.value = e.target.value.substring(0, start) + '  ' + e.target.value.substring(end);
+        e.target.selectionStart = e.target.selectionEnd = start + 2;
+        updateEditorWordCount();
+      }
+    };
+    if (el.noteEditContent) {
+      el.noteEditContent.addEventListener('keydown', handleTextareaTab);
+      el.noteEditContent.addEventListener('input', updateEditorWordCount);
+    }
+    if (el.quickNoteContent) {
+      el.quickNoteContent.addEventListener('keydown', handleTextareaTab);
+    }
+
     // Graph Controls
     if (el.graphZoomIn) el.graphZoomIn.addEventListener('click', () => window.graphEngine && window.graphEngine.zoomIn());
     if (el.graphZoomOut) el.graphZoomOut.addEventListener('click', () => window.graphEngine && window.graphEngine.zoomOut());
@@ -699,6 +777,28 @@
     if (el.modalBackdrop) {
       el.modalBackdrop.addEventListener('click', (e) => {
         if (e.target === el.modalBackdrop) closeModal();
+      });
+    }
+
+    // Quick Note Modal Backdrop click
+    if (el.quickNoteModal) {
+      el.quickNoteModal.addEventListener('click', (e) => {
+        if (e.target === el.quickNoteModal) window.closeQuickNoteModal();
+      });
+    }
+
+    // Confirm Modal events
+    if (el.confirmModalClose) el.confirmModalClose.addEventListener('click', window.closeConfirmModal);
+    if (el.confirmModal) {
+      el.confirmModal.addEventListener('click', (e) => {
+        if (e.target === el.confirmModal) window.closeConfirmModal();
+      });
+    }
+    if (el.confirmModalSubmitBtn) {
+      el.confirmModalSubmitBtn.addEventListener('click', () => {
+        if (typeof confirmCallback === 'function') {
+          confirmCallback();
+        }
       });
     }
 
@@ -735,6 +835,10 @@
 
   function isShareModalOpen() {
     return el.shareModal && el.shareModal.classList.contains('active');
+  }
+
+  function isConfirmModalOpen() {
+    return el.confirmModal && el.confirmModal.classList.contains('active');
   }
 
   window.selectCategory = function (category) {
@@ -848,17 +952,61 @@
     render();
   }
 
-  function getFilteredNotes() {
-    const q = state.searchQuery.toLowerCase();
+  window.toggleSearchMode = function () {
+    state.searchMode = state.searchMode === 'deep' ? 'keyword' : 'deep';
+    if (el.searchModePill) {
+      el.searchModePill.textContent = state.searchMode === 'deep' ? 'Deep' : 'Key';
+      el.searchModePill.classList.toggle('active', state.searchMode === 'deep');
+      el.searchModePill.title = state.searchMode === 'deep'
+        ? 'Deep Conceptual Search: Matches semantic tokens, tags, and titles with ranking'
+        : 'Keyword Search: Exact substring match';
+    }
+    window.showToast(`🔍 Search Mode: ${state.searchMode === 'deep' ? 'Deep Concept Ranking' : 'Exact Keyword'}`, 2000);
+    render();
+  };
 
-    return state.notes.filter(note => {
+  function getFilteredNotes() {
+    const q = state.searchQuery.toLowerCase().trim();
+
+    let filtered = state.notes.filter(note => {
       if (state.selectedCategory !== 'all' && note.category !== state.selectedCategory) return false;
       if (state.selectedTopic !== 'All' && note.topic !== state.selectedTopic) return false;
       if (state.selectedType !== 'All' && note.type !== state.selectedType) return false;
       if (state.selectedTag && !note.tags.includes(state.selectedTag)) return false;
-      if (q && !note._searchStr.includes(q)) return false;
-      return true;
+      if (!q) return true;
+
+      if (state.searchMode === 'keyword') {
+        return note._searchStr.includes(q);
+      }
+
+      // Deep / Conceptual Search: Match any token or fuzzy terms
+      const tokens = q.split(/\s+/).filter(Boolean);
+      return tokens.some(tok => note._searchStr.includes(tok));
     });
+
+    if (q && state.searchMode === 'deep') {
+      const tokens = q.split(/\s+/).filter(Boolean);
+      // Multi-factor conceptual scoring & ranking
+      filtered = filtered.map(note => {
+        let score = 0;
+        const titleLower = note.title.toLowerCase();
+        const summaryLower = (note.summary || '').toLowerCase();
+        const tagsLower = note.tags.map(t => t.toLowerCase());
+
+        tokens.forEach(tok => {
+          if (titleLower === tok) score += 25;
+          else if (titleLower.includes(tok)) score += 12;
+          if (tagsLower.includes(tok)) score += 10;
+          if (note.topic.toLowerCase().includes(tok)) score += 8;
+          if (summaryLower.includes(tok)) score += 5;
+          if (note._searchStr.includes(tok)) score += 2;
+        });
+
+        return { note, score };
+      }).sort((a, b) => b.score - a.score).map(item => item.note);
+    }
+
+    return filtered;
   }
 
   function render(skipFacets = false) {
@@ -967,6 +1115,12 @@
             <div class="sh-card-bottom">
               <span>Updated: ${note.updated}</span>
               <div class="sh-card-actions">
+                <button class="sh-card-delete-btn" onclick="event.stopPropagation(); window.promptDeleteNoteById('${note.id}')" title="Delete Note">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                </button>
                 <button class="sh-card-share-btn" onclick="event.stopPropagation(); window.openShareModal('note', '${note.id}')" title="Share & Ingest Note">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
@@ -1017,6 +1171,7 @@
           <td class="col-tags">${tagsHtml}</td>
           <td class="col-updated">${note.updated}</td>
           <td class="col-actions">
+            <button class="btn-row-delete" onclick="event.stopPropagation(); window.promptDeleteNoteById('${note.id}')" title="Delete Note">Delete</button>
             <button class="btn-row-share" onclick="event.stopPropagation(); window.openShareModal('note', '${note.id}')" title="Share & Ingest Note">Share</button>
             <button class="btn-row-open">Open</button>
           </td>
@@ -1051,6 +1206,7 @@
 
     state.currentNote = note;
     syncBrowserUrl();
+    window.switchNoteModalMode('view');
 
     if (el.modalTitle) el.modalTitle.textContent = note.title;
     if (el.modalPath) el.modalPath.textContent = note.relPath;
@@ -1257,6 +1413,10 @@
     openNote(id);
   };
 
+  function isQuickNoteModalOpen() {
+    return el.quickNoteModal && el.quickNoteModal.classList.contains('active');
+  }
+
   function closeModal() {
     state.currentNote = null;
     syncBrowserUrl();
@@ -1264,6 +1424,461 @@
       el.modalBackdrop.classList.remove('active');
     }
   }
+
+  // =========================================================================
+  // Note Modal Mode Switcher (View / Live Edit / Git History)
+  // =========================================================================
+
+  window.switchNoteModalMode = function (mode) {
+    if (!state.currentNote) return;
+    state.modalMode = mode;
+
+    const viewTab = document.getElementById('modalModeViewBtn');
+    const editTab = document.getElementById('modalModeEditBtn');
+    const histTab = document.getElementById('modalModeHistoryBtn');
+
+    if (viewTab) viewTab.classList.toggle('active', mode === 'view');
+    if (editTab) editTab.classList.toggle('active', mode === 'edit');
+    if (histTab) histTab.classList.toggle('active', mode === 'history');
+
+    if (el.modalBody) el.modalBody.classList.toggle('hidden', mode !== 'view');
+    if (el.modalBodyEdit) el.modalBodyEdit.classList.toggle('hidden', mode !== 'edit');
+    if (el.modalBodyHistory) el.modalBodyHistory.classList.toggle('hidden', mode !== 'history');
+    if (el.modalViewFooter) el.modalViewFooter.classList.toggle('hidden', mode !== 'view');
+
+    if (mode === 'edit') {
+      if (isGuestMode()) {
+        window.showToast('🔒 Editing notes requires signing in. Please sign in with Google.', 3500);
+        window.handleGoogleLogin();
+        window.switchNoteModalMode('view');
+        return;
+      }
+      if (el.noteEditTitle) el.noteEditTitle.value = state.currentNote.title;
+      if (el.noteEditSummary) el.noteEditSummary.value = state.currentNote.summary || '';
+      if (el.noteEditType) el.noteEditType.value = state.currentNote.type || 'concept';
+      if (el.noteEditContent) {
+        el.noteEditContent.value = state.currentNote.bodyContent || '';
+        updateEditorWordCount();
+      }
+    } else if (mode === 'history') {
+      fetchNoteHistory(state.currentNote.relPath);
+    }
+  };
+
+  function updateEditorWordCount() {
+    if (!el.noteEditContent || !el.noteEditWordCount) return;
+    const text = el.noteEditContent.value;
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    el.noteEditWordCount.textContent = `${words} words • ${text.length} chars`;
+  }
+
+  window.saveCurrentNoteEdits = async function () {
+    if (!state.currentNote) return;
+    if (isGuestMode()) {
+      window.showToast('🔒 Please sign in with Google to save note changes.', 3500);
+      return;
+    }
+
+    const title = el.noteEditTitle ? el.noteEditTitle.value.trim() : state.currentNote.title;
+    const summary = el.noteEditSummary ? el.noteEditSummary.value.trim() : state.currentNote.summary;
+    const docType = el.noteEditType ? el.noteEditType.value : state.currentNote.type;
+    const content = el.noteEditContent ? el.noteEditContent.value : state.currentNote.bodyContent;
+
+    if (!title) {
+      window.showToast('⚠️ Note Title cannot be empty.', 2500);
+      return;
+    }
+
+    const btn = document.getElementById('saveNoteBtn');
+    if (btn) btn.disabled = true;
+    window.showToast('⏳ Saving note changes...', 2000);
+
+    try {
+      const res = await postJson('./api/save-note', {
+        relPath: state.currentNote.relPath,
+        title,
+        summary,
+        type: docType,
+        content
+      });
+
+      if (btn) btn.disabled = false;
+      if (res.success) {
+        window.showToast('✅ Note saved successfully!', 3000);
+        await window.reloadKnowledgeData(() => {
+          if (res.note) {
+            openNote(res.note.id);
+          }
+        });
+        window.switchNoteModalMode('view');
+      } else {
+        window.showToast(`❌ Error: ${res.error || 'Failed to save note'}`, 4000);
+      }
+    } catch (err) {
+      if (btn) btn.disabled = false;
+      window.showToast(`❌ Error: ${err.message}`, 4000);
+    }
+  };
+
+  async function fetchNoteHistory(relPath) {
+    if (!el.historyCommitsList) return;
+    el.historyCommitsList.innerHTML = '<div class="notif-empty">⏳ Loading commit log...</div>';
+    if (el.historyDiffViewer) el.historyDiffViewer.textContent = 'Select a commit revision above to view diff / content.';
+
+    try {
+      const res = await fetch(`./api/note-history?relPath=${encodeURIComponent(relPath)}`);
+      if (!res.ok) throw new Error('Failed to load history');
+      const data = await res.json();
+      const commits = data.commits || [];
+
+      if (commits.length === 0) {
+        el.historyCommitsList.innerHTML = '<div class="notif-empty">No git commits recorded yet for this note.</div>';
+        return;
+      }
+
+      el.historyCommitsList.innerHTML = commits.map((c, i) => `
+        <div class="history-commit-item ${i === 0 ? 'active' : ''}" onclick="window.loadCommitRevision('${escapeHtml(c.hash)}', this)">
+          <div class="commit-item-left">
+            <div class="commit-message">${escapeHtml(c.message)}</div>
+            <div class="commit-meta">${escapeHtml(c.author)} • ${escapeHtml(c.date)}</div>
+          </div>
+          <span class="commit-hash">${escapeHtml(c.hash)}</span>
+        </div>
+      `).join('');
+
+      if (commits[0]) {
+        window.loadCommitRevision(commits[0].hash);
+      }
+    } catch (err) {
+      el.historyCommitsList.innerHTML = `<div class="notif-empty">⚠️ Could not load history: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  window.loadCommitRevision = async function (commitHash, targetEl) {
+    if (!state.currentNote || !el.historyDiffViewer) return;
+
+    if (targetEl) {
+      document.querySelectorAll('.history-commit-item').forEach(item => item.classList.remove('active'));
+      targetEl.classList.add('active');
+    }
+
+    const titleEl = document.getElementById('historyDiffTitle');
+    if (titleEl) titleEl.textContent = `Revision ${commitHash}: Preview & Snapshot`;
+    el.historyDiffViewer.textContent = '⏳ Loading revision content...';
+
+    try {
+      const res = await fetch(`./api/note-diff?relPath=${encodeURIComponent(state.currentNote.relPath)}&commit=${encodeURIComponent(commitHash)}`);
+      if (!res.ok) throw new Error('Could not fetch revision');
+      const data = await res.json();
+      el.historyDiffViewer.textContent = data.content || 'No content found for this revision.';
+    } catch (err) {
+      el.historyDiffViewer.textContent = `⚠️ Error reading revision: ${err.message}`;
+    }
+  };
+
+  // =========================================================================
+  // Quick Note Creation Modal Controller
+  // =========================================================================
+
+  window.openQuickNoteModal = function () {
+    if (isGuestMode()) {
+      window.showToast('🔒 Creating notes requires signing in. Please sign in with Google.', 3500);
+      window.handleGoogleLogin();
+      return;
+    }
+
+    if (el.quickNoteCategory) {
+      el.quickNoteCategory.innerHTML = categoryOptionsHtml(state.selectedCategory !== 'all' ? state.selectedCategory : state.defaultCategory);
+    }
+    window.updateQuickNoteDomains();
+    window.applyNoteTemplate('concept');
+
+    if (el.quickNoteModal) {
+      el.quickNoteModal.classList.add('active');
+      if (el.quickNoteTitle) el.quickNoteTitle.focus();
+    }
+  };
+
+  window.closeQuickNoteModal = function () {
+    if (el.quickNoteModal) {
+      el.quickNoteModal.classList.remove('active');
+    }
+  };
+
+  window.updateQuickNoteDomains = function () {
+    if (!el.quickNoteCategory || !el.quickNoteDomain) return;
+    const cat = el.quickNoteCategory.value || state.defaultCategory;
+    const doms = domainsFor(cat);
+    const currentTopicObj = doms.find(d => d.name.toLowerCase() === state.selectedTopic.toLowerCase() || d.id === state.selectedTopic.toLowerCase());
+    const defaultDomainId = currentTopicObj ? currentTopicObj.id : (doms[0] ? doms[0].id : cat);
+
+    el.quickNoteDomain.innerHTML = doms.map(d => `
+      <option value="${d.id}" ${d.id === defaultDomainId ? 'selected' : ''}>● ${escapeHtml(d.name)}</option>
+    `).join('');
+  };
+
+  const NOTE_TEMPLATES = {
+    concept: {
+      type: 'concept',
+      tags: 'concept, fundamental, design',
+      summary: 'Core foundational principles and architectural concepts.',
+      content: '## Overview\n\nExplain the foundational concept here.\n\n## Key Mechanics\n- Mechanism 1: Core behavior\n- Mechanism 2: Data propagation\n\n## Related Knowledge\n- [[INDEX]]\n'
+    },
+    procedure: {
+      type: 'procedure',
+      tags: 'how-to, runbook, guide',
+      summary: 'Step-by-step procedure and execution runbook.',
+      content: '## Objective\n\nClear summary of what this procedure achieves.\n\n## Prerequisites\n- Required tools or permissions\n- Dependencies verified\n\n## Step-by-Step Execution\n1. Run initialization command\n2. Verify health responses\n3. Complete validation\n'
+    },
+    spec: {
+      type: 'spec',
+      tags: 'specification, architecture, rfc',
+      summary: 'Technical architecture specification and interface contract.',
+      content: '## Context & Problem Statement\n\nProblem description and requirements.\n\n## Architecture Design\n```\n[Client] -> [API Gateway] -> [Knowledge Store]\n```\n\n## API Contract\n| Endpoint | Method | Description |\n| :--- | :--- | :--- |\n| `/api/resource` | POST | Resource operation |\n'
+    },
+    reference: {
+      type: 'reference',
+      tags: 'cheatsheet, reference, api',
+      summary: 'Quick syntax reference and lookup tables.',
+      content: '## Quick Reference Cheat Sheet\n\n| Command | Syntax | Output |\n| :--- | :--- | :--- |\n| Quick check | `check --all` | Status summary |\n'
+    },
+    adr: {
+      type: 'decision',
+      tags: 'adr, architecture, decision',
+      summary: 'Architecture Decision Record evaluating options and trade-offs.',
+      content: '## Status\nAccepted\n\n## Context\nWhy this decision is required.\n\n## Decision\nChosen architecture and rationale.\n\n## Consequences\n- Positive trade-offs\n- Known limitations\n'
+    },
+    meeting: {
+      type: 'concept',
+      tags: 'meeting, scratchpad, notes',
+      summary: 'Discussion notes, action items, and sync log.',
+      content: '## Date & Participants\n- Date: Today\n- Participants: Lead Engineer\n\n## Key Topics Discussed\n1. System architecture updates\n2. Performance and caching\n\n## Action Items\n- [ ] Task 1\n- [ ] Task 2\n'
+    }
+  };
+
+  window.applyNoteTemplate = function (templateKey) {
+    const tpl = NOTE_TEMPLATES[templateKey] || NOTE_TEMPLATES.concept;
+    document.querySelectorAll('.template-pill').forEach(btn => {
+      btn.classList.toggle('active', btn.textContent.toLowerCase().includes(templateKey));
+    });
+
+    if (el.quickNoteType) el.quickNoteType.value = tpl.type;
+    if (el.quickNoteTags && (!el.quickNoteTags.value || el.quickNoteTags.value.includes('concept') || el.quickNoteTags.value.includes('how-to'))) {
+      el.quickNoteTags.value = tpl.tags;
+    }
+    if (el.quickNoteSummary && !el.quickNoteSummary.value) {
+      el.quickNoteSummary.value = tpl.summary;
+    }
+    if (el.quickNoteContent) {
+      el.quickNoteContent.value = tpl.content;
+    }
+  };
+
+  window.submitQuickNote = async function () {
+    if (isGuestMode()) {
+      window.showToast('🔒 Please sign in with Google to create notes.', 3500);
+      return;
+    }
+
+    const title = el.quickNoteTitle ? el.quickNoteTitle.value.trim() : '';
+    const category = el.quickNoteCategory ? el.quickNoteCategory.value : state.defaultCategory;
+    const domain = el.quickNoteDomain ? el.quickNoteDomain.value : '';
+    const docType = el.quickNoteType ? el.quickNoteType.value : 'concept';
+    const tags = el.quickNoteTags ? el.quickNoteTags.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const summary = el.quickNoteSummary ? el.quickNoteSummary.value.trim() : title;
+    const content = el.quickNoteContent ? el.quickNoteContent.value.trim() : '';
+
+    if (!title || !domain) {
+      window.showToast('⚠️ Note Title and Topic/Domain are required.', 3000);
+      return;
+    }
+
+    const btn = document.getElementById('btnSubmitQuickNote');
+    if (btn) btn.disabled = true;
+    window.showToast(`⏳ Creating note "${title}"...`, 2000);
+
+    try {
+      const res = await postJson('./api/create-note', {
+        title,
+        category,
+        domain,
+        type: docType,
+        tags,
+        summary,
+        content
+      });
+
+      if (btn) btn.disabled = false;
+      if (res.success) {
+        window.showToast(`✅ Created note "${title}"!`, 3500);
+        window.closeQuickNoteModal();
+        if (el.quickNoteTitle) el.quickNoteTitle.value = '';
+        await window.reloadKnowledgeData(() => {
+          if (res.note_id) {
+            openNote(res.note_id);
+          }
+        });
+      } else {
+        window.showToast(`❌ Error: ${res.error || 'Failed to create note'}`, 4000);
+      }
+    } catch (err) {
+      if (btn) btn.disabled = false;
+      window.showToast(`❌ Error: ${err.message}`, 4000);
+    }
+  };
+
+  // =========================================================================
+  // Reload Data & Confirmation Modal Controller
+  // =========================================================================
+
+  let confirmCallback = null;
+
+  window.openConfirmModal = function ({ title, badge, message, previewHtml, confirmLabel, onConfirm }) {
+    confirmCallback = onConfirm || null;
+    if (el.confirmModalTitle) el.confirmModalTitle.textContent = title || 'Confirm Action';
+    if (el.confirmModalBadge) el.confirmModalBadge.textContent = badge || 'Action';
+    if (el.confirmModalMessage) el.confirmModalMessage.textContent = message || 'Are you sure you want to proceed?';
+    if (el.confirmModalPreview) {
+      if (previewHtml) {
+        el.confirmModalPreview.innerHTML = previewHtml;
+        el.confirmModalPreview.classList.remove('hidden');
+      } else {
+        el.confirmModalPreview.innerHTML = '';
+        el.confirmModalPreview.classList.add('hidden');
+      }
+    }
+    if (el.confirmModalSubmitBtn) {
+      el.confirmModalSubmitBtn.textContent = confirmLabel || 'Delete';
+    }
+    if (el.confirmModal) {
+      el.confirmModal.classList.add('active');
+    }
+  };
+
+  window.closeConfirmModal = function () {
+    confirmCallback = null;
+    if (el.confirmModal) {
+      el.confirmModal.classList.remove('active');
+    }
+  };
+
+  window.reloadKnowledgeData = async function (callback) {
+    try {
+      const res = await fetch('./api/notes');
+      if (res.ok) {
+        window.KB_DATA = await res.json();
+        loadData();
+      }
+      fetchNotifications();
+      if (typeof callback === 'function') {
+        callback(window.KB_DATA);
+      }
+    } catch (e) {
+      console.warn('Could not reload knowledge data:', e);
+    }
+  };
+
+  window.promptDeleteCurrentNote = function () {
+    if (!state.currentNote) return;
+    window.promptDeleteNoteById(state.currentNote.id);
+  };
+
+  window.promptDeleteNoteById = function (noteId) {
+    if (isGuestMode()) {
+      window.showToast('🔒 Deleting notes requires signing in. Please sign in with Google.', 3500);
+      window.handleGoogleLogin();
+      return;
+    }
+
+    const note = state.notes.find(n => n.id === noteId);
+    if (!note) return;
+
+    window.openConfirmModal({
+      title: 'Delete Knowledge Note',
+      badge: 'Permanent Deletion',
+      message: `Are you sure you want to permanently delete this note? This action cannot be undone.`,
+      previewHtml: `
+        <div><strong>Title:</strong> ${escapeHtml(note.title)}</div>
+        <div style="font-family:monospace; margin-top:4px; font-size:12px; color:var(--text-muted);">${escapeHtml(note.relPath)}</div>
+      `,
+      confirmLabel: 'Delete Note',
+      onConfirm: async () => {
+        window.closeConfirmModal();
+        window.showToast(`🗑️ Deleting note "${note.title}"...`, 2000);
+        try {
+          const res = await postJson('./api/delete-note', { relPath: note.relPath });
+          if (res.success) {
+            window.showToast(`✅ Note deleted successfully`, 3000);
+            if (state.currentNote && state.currentNote.id === note.id) {
+              closeModal();
+            }
+            await window.reloadKnowledgeData();
+          } else {
+            window.showToast(`❌ Error: ${res.error || 'Failed to delete note'}`, 4000);
+          }
+        } catch (err) {
+          window.showToast(`❌ Could not delete note: ${err.message}`, 4000);
+        }
+      }
+    });
+  };
+
+  window.promptDeleteCurrentTopic = function () {
+    if (!state.selectedTopic || state.selectedTopic === 'All') return;
+    window.promptDeleteTopic(state.selectedTopic);
+  };
+
+  window.promptDeleteTopic = function (topicName) {
+    if (!topicName || topicName === 'All') return;
+
+    if (isGuestMode()) {
+      window.showToast('🔒 Deleting topics requires signing in. Please sign in with Google.', 3500);
+      window.handleGoogleLogin();
+      return;
+    }
+
+    const targetNotes = state.notes.filter(n => n.topic.toLowerCase() === topicName.toLowerCase());
+    const sample = targetNotes[0];
+    const domain = sample ? sample.domain : topicName.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+    const category = sample ? sample.category : (state.selectedCategory !== 'all' ? state.selectedCategory : state.defaultCategory);
+
+    window.openConfirmModal({
+      title: `Delete Topic: ${topicName}`,
+      badge: 'Irreversible Action',
+      message: `Are you sure you want to delete the entire topic "${topicName}"? All ${targetNotes.length} note(s) inside "knowledge/${category}/${domain}" will be permanently removed.`,
+      previewHtml: `
+        <div><strong>Topic:</strong> ${escapeHtml(topicName)} (Domain: <code>${escapeHtml(domain)}</code>)</div>
+        <div style="margin-top:4px;"><strong>Contains:</strong> ${targetNotes.length} markdown note asset(s)</div>
+        <div style="font-family:monospace; margin-top:4px; font-size:12px; color:var(--text-muted);">Folder: knowledge/${category}/${domain}/</div>
+      `,
+      confirmLabel: `Delete All in ${topicName}`,
+      onConfirm: async () => {
+        window.closeConfirmModal();
+        window.showToast(`🗑️ Deleting topic "${topicName}" and ${targetNotes.length} note(s)...`, 2500);
+        try {
+          const res = await postJson('./api/delete-topic', {
+            topic: topicName,
+            domain: domain,
+            category: category
+          });
+          if (res.success) {
+            window.showToast(`✅ Topic "${topicName}" deleted successfully`, 3500);
+            if (state.selectedTopic === topicName) {
+              state.selectedTopic = 'All';
+            }
+            if (state.currentNote && targetNotes.some(n => n.id === state.currentNote.id)) {
+              closeModal();
+            }
+            await window.reloadKnowledgeData();
+          } else {
+            window.showToast(`❌ Error: ${res.error || 'Failed to delete topic'}`, 4000);
+          }
+        } catch (err) {
+          window.showToast(`❌ Could not delete topic: ${err.message}`, 4000);
+        }
+      }
+    });
+  };
 
   // =========================================================================
   // Share & Knowledge Base Ingestion System

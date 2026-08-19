@@ -11,8 +11,10 @@ import sys
 import json
 import time
 import shutil
+import socket
 import logging
 import threading
+import subprocess
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs, unquote
@@ -547,6 +549,14 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
+    def server_bind(self):
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        except (AttributeError, OSError):
+            pass
+        super().server_bind()
+
 
 class KBServerHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -671,6 +681,61 @@ class KBServerHandler(BaseHTTPRequestHandler):
                 self.send_json(500, {"error": str(e)})
             return
 
+        # API: Note Git History
+        if path.startswith("/api/note-history"):
+            params = parse_qs(parsed_url.query)
+            rel_path = unquote(params.get("relPath", params.get("path", [""]))[0])
+            target = safe_join(KB_ROOT_DIR, rel_path)
+            if not target or not os.path.isfile(target):
+                self.send_json(404, {"error": "Note not found"})
+                return
+
+            try:
+                rel_git_path = os.path.relpath(target, KB_ROOT_DIR)
+                cmd = ["git", "-C", KB_ROOT_DIR, "log", "-n", "15", "--pretty=format:%h|%an|%ad|%s", "--date=short", "--", rel_git_path]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                commits = []
+                if res.returncode == 0 and res.stdout.strip():
+                    for line in res.stdout.strip().split("\n"):
+                        parts = line.split("|", 3)
+                        if len(parts) == 4:
+                            commits.append({
+                                "hash": parts[0],
+                                "author": parts[1],
+                                "date": parts[2],
+                                "message": parts[3]
+                            })
+                self.send_json(200, {"commits": commits, "relPath": rel_path})
+            except Exception as e:
+                self.send_json(500, {"error": str(e)})
+            return
+
+        # API: Note Git Diff / Show revision
+        if path.startswith("/api/note-diff"):
+            params = parse_qs(parsed_url.query)
+            rel_path = unquote(params.get("relPath", params.get("path", [""]))[0])
+            commit_hash = unquote(params.get("commit", [""])[0]).strip()
+            target = safe_join(KB_ROOT_DIR, rel_path)
+            if not target or not os.path.isfile(target):
+                self.send_json(404, {"error": "Note not found"})
+                return
+
+            try:
+                rel_git_path = os.path.relpath(target, KB_ROOT_DIR)
+                if commit_hash:
+                    cmd = ["git", "-C", KB_ROOT_DIR, "show", f"{commit_hash}:{rel_git_path}"]
+                else:
+                    cmd = ["git", "-C", KB_ROOT_DIR, "diff", "HEAD", "--", rel_git_path]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                self.send_json(200, {
+                    "content": res.stdout,
+                    "commit": commit_hash,
+                    "relPath": rel_path
+                })
+            except Exception as e:
+                self.send_json(500, {"error": str(e)})
+            return
+
         # Serve static files from dashboard directory
         target_file = safe_join(DASHBOARD_DIR, path.lstrip("/") or "index.html")
         if target_file and os.path.isfile(target_file):
@@ -748,13 +813,158 @@ class KBServerHandler(BaseHTTPRequestHandler):
             return
 
         # Mutation endpoints: Block if explicitly in guest mode
-        if path in ["/api/update-tags", "/api/move-topic", "/api/ingest"]:
+        if path in ["/api/update-tags", "/api/move-topic", "/api/ingest", "/api/change-category", "/api/delete-note", "/api/delete-topic", "/api/save-note", "/api/create-note"]:
             if is_guest_req:
                 self.send_json(403, {
-                    "error": "Guest Mode is read-only. Please sign in with Google to manipulate or ingest data.",
+                    "error": "Guest Mode is read-only. Please sign in with Google to edit, create, or delete data.",
                     "code": "GUEST_READ_ONLY"
                 })
                 return
+
+        # API: Save Note Content / Edit Note
+        if path == "/api/save-note":
+            rel_path = req_data.get("relPath", "").strip()
+            target = safe_join(KB_ROOT_DIR, rel_path)
+            if not target or not os.path.isfile(target) or not target.endswith(".md"):
+                self.send_json(404, {"error": "Note file not found"})
+                return
+
+            raw_body = req_data.get("content", "")
+            title = req_data.get("title", "").strip()
+            summary = req_data.get("summary", "").strip()
+            doc_type = req_data.get("type", "").strip()
+            status_val = req_data.get("status", "").strip()
+
+            try:
+                with open(target, "r", encoding="utf-8") as f:
+                    existing = f.read()
+
+                # If full document with frontmatter was sent
+                if raw_body.startswith("---"):
+                    new_file_content = raw_body
+                    today_str = time.strftime("%Y-%m-%d")
+                    new_file_content = set_frontmatter_value(new_file_content, "updated", today_str)
+                else:
+                    today_str = time.strftime("%Y-%m-%d")
+                    existing = set_frontmatter_value(existing, "updated", today_str)
+                    if title:
+                        existing = set_frontmatter_value(existing, "title", f'"{title}"')
+                    if summary:
+                        existing = set_frontmatter_value(existing, "summary", f'"{summary}"')
+                    if doc_type:
+                        existing = set_frontmatter_value(existing, "type", f'"{doc_type}"')
+                    if status_val:
+                        existing = set_frontmatter_value(existing, "status", f'"{status_val}"')
+
+                    # Replace markdown body
+                    fm_match = re.match(r"^---\n(.*?)\n---\n*(.*)$", existing, re.DOTALL)
+                    if fm_match:
+                        fm_str = fm_match.group(1)
+                        new_file_content = f"---\n{fm_str}\n---\n\n{raw_body.strip()}\n"
+                    else:
+                        new_file_content = raw_body
+
+                with open(target, "w", encoding="utf-8") as f:
+                    f.write(new_file_content)
+
+                payload = build_knowledge_data()
+                found_note = None
+                for n in payload.get("notes", []):
+                    if n.get("relPath") == rel_path or os.path.abspath(os.path.join(KB_ROOT_DIR, n.get("relPath", ""))) == os.path.abspath(target):
+                        found_note = n
+                        break
+
+                record_activity("edit_note", f"Edited note: {title or os.path.basename(target)}", f"Saved changes to {rel_path}", "User Edit")
+                logger.info(f"Saved note edits: {rel_path}")
+                self.send_json(200, {
+                    "success": True,
+                    "message": "Note saved successfully",
+                    "note": found_note,
+                    "relPath": rel_path
+                })
+            except Exception as e:
+                logger.error(f"Error saving note {rel_path}: {e}")
+                self.send_json(500, {"error": str(e)})
+            return
+
+        # API: Create Quick Note
+        if path == "/api/create-note":
+            title = req_data.get("title", "").strip()
+            category = req_data.get("category", DEFAULT_CATEGORY).strip()
+            domain = req_data.get("domain", "").strip()
+            doc_type = req_data.get("type", "concept").strip()
+            tags = req_data.get("tags", [])
+            summary = req_data.get("summary", "").strip()
+            content = req_data.get("content", "").strip()
+
+            if not title or not domain:
+                self.send_json(400, {"error": "Title and Topic/Domain are required"})
+                return
+
+            slug = re.sub(r"[^a-zA-Z0-9_-]", "-", title.lower()).strip("-")
+            slug = re.sub(r"-+", "-", slug)[:60]
+            if not slug:
+                slug = f"note-{int(time.time())}"
+
+            today_str = time.strftime("%Y-%m-%d")
+            tags_json = json.dumps(tags)
+            fm_lines = [
+                "---",
+                f'title: "{title}"',
+                f'domain: "{domain}"',
+                f'category: "{category}"',
+                f'type: "{doc_type}"',
+                f'tags: {tags_json}',
+                f'created: {today_str}',
+                f'updated: {today_str}',
+                'status: active',
+                f'summary: "{summary or title}"',
+                "related:",
+                '  - "[[INDEX]]"',
+                "---",
+                "",
+                f"# {title}",
+                "",
+                content or f"Notes and concept overview for {title}."
+            ]
+
+            file_content = "\n".join(fm_lines) + "\n"
+            target_rel = f"knowledge/{category}/{domain}/{slug}.md" if domain != category else f"knowledge/{category}/{slug}.md"
+            target_abs = safe_join(KB_ROOT_DIR, target_rel)
+            if not target_abs:
+                self.send_json(400, {"error": "Invalid destination path"})
+                return
+
+            if os.path.exists(target_abs):
+                slug = f"{slug}-{int(time.time()) % 10000}"
+                target_rel = f"knowledge/{category}/{domain}/{slug}.md" if domain != category else f"knowledge/{category}/{slug}.md"
+                target_abs = safe_join(KB_ROOT_DIR, target_rel)
+
+            try:
+                os.makedirs(os.path.dirname(target_abs), exist_ok=True)
+                with open(target_abs, "w", encoding="utf-8") as f:
+                    f.write(file_content)
+
+                payload = build_knowledge_data()
+                found_note = None
+                for n in payload.get("notes", []):
+                    if os.path.abspath(os.path.join(KB_ROOT_DIR, n.get("relPath", ""))) == os.path.abspath(target_abs):
+                        found_note = n
+                        break
+
+                record_activity("create_note", f"Created note: {title}", f"Created at {target_rel}", "User Action")
+                logger.info(f"Created new note: {target_rel}")
+                self.send_json(200, {
+                    "success": True,
+                    "message": f"Successfully created note '{title}'",
+                    "note": found_note,
+                    "note_id": found_note["id"] if found_note else None,
+                    "relPath": target_rel
+                })
+            except Exception as e:
+                logger.error(f"Error creating note {target_abs}: {e}")
+                self.send_json(500, {"error": str(e)})
+            return
 
         # API: Rewrite a note's frontmatter tags in place
         if path == "/api/update-tags":
@@ -772,6 +982,168 @@ class KBServerHandler(BaseHTTPRequestHandler):
                 record_activity("tag_update", f"Updated tags on {os.path.basename(target)}", f"New tags: {', '.join(tags)}", "User Edit")
                 self.send_json(200, {"success": True, "message": "Tags updated", "tags": tags})
             except Exception as e:
+                self.send_json(500, {"error": str(e)})
+            return
+
+        # API: Move a note to another category/domain folder and update its frontmatter
+        if path == "/api/change-category":
+            source = safe_join(KB_ROOT_DIR, req_data.get("oldPath", ""))
+            destination = safe_join(KB_ROOT_DIR, req_data.get("newPath", ""))
+            category = req_data.get("category", "")
+            domain = req_data.get("domain", "")
+            if not source or not os.path.isfile(source):
+                self.send_json(404, {"error": "Note not found"})
+                return
+            if not destination or category not in CATEGORY_CONFIG:
+                self.send_json(400, {"error": "Invalid destination"})
+                return
+            try:
+                with open(source, "r", encoding="utf-8") as f:
+                    content = f.read()
+                content = set_frontmatter_value(content, "category", f'"{category}"')
+                if domain:
+                    content = set_frontmatter_value(content, "domain", f'"{domain}"')
+
+                os.makedirs(os.path.dirname(destination), exist_ok=True)
+                with open(destination, "w", encoding="utf-8") as f:
+                    f.write(content)
+                if os.path.abspath(source) != os.path.abspath(destination):
+                    os.remove(source)
+
+                payload = build_knowledge_data()
+                rel_target = os.path.relpath(destination, KB_ROOT_DIR).replace("\\", "/")
+                logger.info(f"Note moved: {req_data.get('oldPath')} -> {rel_target}")
+                self.send_json(200, {
+                    "success": True,
+                    "path": rel_target,
+                    "note_id": rel_target.replace(".md", "").replace("/", "__"),
+                    "totalCount": payload["totalCount"]
+                })
+            except Exception as e:
+                self.send_json(500, {"error": str(e)})
+            return
+
+        # API: Delete Note
+        if path == "/api/delete-note":
+            rel_path = req_data.get("relPath", "").strip()
+            if not rel_path:
+                self.send_json(400, {"error": "Missing relPath parameter"})
+                return
+
+            target = safe_join(KB_ROOT_DIR, rel_path)
+            knowledge_root = os.path.abspath(KNOWLEDGE_DIR)
+            if not target or not target.startswith(knowledge_root + os.sep) or not os.path.isfile(target) or not target.endswith(".md"):
+                self.send_json(404, {"error": "Note file not found or invalid path"})
+                return
+
+            try:
+                # Read title from frontmatter for activity log
+                title = os.path.basename(target).replace(".md", "")
+                try:
+                    with open(target, "r", encoding="utf-8", errors="replace") as f:
+                        fm, _ = parse_frontmatter(f.read())
+                        title = fm.get("title", title)
+                except Exception:
+                    pass
+
+                os.remove(target)
+                payload = build_knowledge_data()
+                record_activity("delete_note", f"Deleted note: {title}", f"Removed note at {rel_path}", "User Action")
+                logger.info(f"Deleted note: {rel_path}")
+                self.send_json(200, {
+                    "success": True,
+                    "message": f"Successfully deleted note '{title}'",
+                    "totalCount": payload["totalCount"]
+                })
+            except Exception as e:
+                logger.error(f"Error deleting note {rel_path}: {e}")
+                self.send_json(500, {"error": str(e)})
+            return
+
+        # API: Delete Topic (Domain folder & its notes)
+        if path == "/api/delete-topic":
+            topic_name = req_data.get("topic", "").strip()
+            domain = req_data.get("domain", "").strip()
+            category = req_data.get("category", "").strip().lower()
+
+            target_dir = None
+            # 1. If domain and category are explicitly provided
+            if category and domain and category in CATEGORY_CONFIG:
+                candidate = safe_join(KNOWLEDGE_DIR, category, domain)
+                if candidate and os.path.isdir(candidate):
+                    target_dir = candidate
+
+            # 2. If not found by explicit category/domain, search across categories
+            if not target_dir and domain:
+                for cat in CATEGORY_CONFIG:
+                    candidate = safe_join(KNOWLEDGE_DIR, cat, domain)
+                    if candidate and os.path.isdir(candidate):
+                        target_dir = candidate
+                        category = cat
+                        break
+
+            # 3. If not found yet, lookup domain by topic_name
+            if not target_dir and topic_name:
+                for d_key, d_cfg in TOPIC_CONFIG.items():
+                    if d_cfg.get("name", "").lower() == topic_name.lower() or d_key.lower() == topic_name.lower():
+                        cat = d_cfg.get("category", DEFAULT_CATEGORY)
+                        candidate = safe_join(KNOWLEDGE_DIR, cat, d_key)
+                        if candidate and os.path.isdir(candidate):
+                            target_dir = candidate
+                            domain = d_key
+                            category = cat
+                            break
+
+                if not target_dir:
+                    # Search folders matching slugified topic_name
+                    slug_topic = re.sub(r"[^a-zA-Z0-9_-]", "-", topic_name.lower()).strip("-")
+                    for cat in CATEGORY_CONFIG:
+                        cat_dir = os.path.join(KNOWLEDGE_DIR, cat)
+                        if os.path.isdir(cat_dir):
+                            for d in os.listdir(cat_dir):
+                                if d.lower() == slug_topic.lower() or d.lower() == topic_name.lower():
+                                    candidate = os.path.join(cat_dir, d)
+                                    if os.path.isdir(candidate):
+                                        target_dir = candidate
+                                        domain = d
+                                        category = cat
+                                        break
+                            if target_dir:
+                                break
+
+            if not target_dir:
+                self.send_json(404, {"error": f"Topic folder not found for '{topic_name or domain}'"})
+                return
+
+            knowledge_root = os.path.abspath(KNOWLEDGE_DIR)
+            target_abs = os.path.abspath(target_dir)
+
+            # Safety check: Never delete root KNOWLEDGE_DIR or top-level category directories
+            category_roots = [os.path.abspath(os.path.join(KNOWLEDGE_DIR, cat)) for cat in CATEGORY_CONFIG]
+            if target_abs == knowledge_root or target_abs in category_roots or not target_abs.startswith(knowledge_root + os.sep):
+                self.send_json(400, {"error": "Cannot delete top-level category or root knowledge directory."})
+                return
+
+            try:
+                # Count files deleted
+                deleted_notes_count = sum(len([f for f in files if f.endswith(".md")]) for _, _, files in os.walk(target_abs))
+                shutil.rmtree(target_abs)
+
+                # Clean in-memory TOPIC_CONFIG if present
+                if domain in TOPIC_CONFIG:
+                    TOPIC_CONFIG.pop(domain, None)
+
+                payload = build_knowledge_data()
+                display_title = topic_name or (domain.replace("-", " ").replace("_", " ").title())
+                record_activity("delete_topic", f"Deleted topic: {display_title}", f"Removed domain '{domain}' and {deleted_notes_count} note(s)", "User Action")
+                logger.info(f"Deleted topic folder: {target_abs} ({deleted_notes_count} notes removed)")
+                self.send_json(200, {
+                    "success": True,
+                    "message": f"Successfully deleted topic '{display_title}' and {deleted_notes_count} note(s)",
+                    "totalCount": payload["totalCount"]
+                })
+            except Exception as e:
+                logger.error(f"Error deleting topic {target_abs}: {e}")
                 self.send_json(500, {"error": str(e)})
             return
 
@@ -872,7 +1244,14 @@ def run_server():
     sync_thread.start()
 
     server_address = ("0.0.0.0", PORT)
-    httpd = ThreadedHTTPServer(server_address, KBServerHandler)
+    httpd = ThreadedHTTPServer(server_address, KBServerHandler, bind_and_activate=False)
+    httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except (AttributeError, OSError):
+        pass
+    httpd.server_bind()
+    httpd.server_activate()
     logger.info(f"Knowledge Base Dashboard Server listening on http://0.0.0.0:{PORT}")
     try:
         httpd.serve_forever()
