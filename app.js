@@ -1,0 +1,2107 @@
+/**
+ * SmartHub Knowledge Base Dashboard - Ultra-Fast Controller
+ * Authentic SmartHub UI, Deep Linking & Universal Knowledge Ingestion System
+ */
+
+(function () {
+  'use strict';
+
+  const state = {
+    notes: [],
+    topics: [],
+    types: [],
+    tags: [],
+    categories: [], // [{id, name}] from the payload — never hardcoded
+    defaultCategory: 'general',
+    selectedCategory: 'all', // 'all' or any category id
+    selectedTopic: 'All',
+    selectedType: 'All',
+    selectedTag: null,
+    searchQuery: '',
+    viewMode: 'card', // 'card' | 'list' | 'graph'
+    currentNote: null,
+    theme: 'dark',
+    activeShareTab: 'link',
+    shareData: null,
+    taxonomy: {}
+  };
+
+  const el = {};
+
+  const AUTO_TOPIC_COLORS = 12;
+  const topicColorCache = new Map();
+
+  function slugify(value) {
+    return String(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  }
+
+  // Colours are declared in styles.css as --topic-<slug> / --cat-<slug>; anything
+  // unmapped hashes into --topic-auto-N so a newly created folder or category
+  // still gets a stable colour with no code change.
+  function autoColor(slug) {
+    let hash = 0;
+    for (let i = 0; i < slug.length; i++) hash = (hash + slug.charCodeAt(i)) % AUTO_TOPIC_COLORS;
+    return cssVar(`--topic-auto-${hash}`);
+  }
+
+  function topicColor(domain) {
+    if (!domain) return cssVar('--topic-auto-0');
+    if (topicColorCache.has(domain)) return topicColorCache.get(domain);
+
+    const slug = slugify(domain);
+    const color = cssVar(`--topic-${slug}`) || autoColor(slug);
+    topicColorCache.set(domain, color);
+    return color;
+  }
+
+  function categoryColor(categoryId) {
+    const slug = slugify(categoryId);
+    return cssVar(`--cat-${slug}`) || autoColor(slug);
+  }
+
+  function categoryIds() {
+    return state.categories.map(c => c.id);
+  }
+
+  function categoryName(categoryId) {
+    if (categoryId === 'all') return 'All Knowledge';
+    const hit = state.categories.find(c => c.id === categoryId);
+    return hit ? hit.name : capitalize(categoryId || '');
+  }
+
+  function categoryOptionsHtml(selected) {
+    return state.categories
+      .map(c => `<option value="${c.id}" ${c.id === selected ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
+      .join('');
+  }
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  // Domain pick-lists come from the server payload (state.taxonomy) so the
+  // dashboard never carries a second copy of the topic map.
+  function domainsFor(category) {
+    return state.taxonomy[category] || [];
+  }
+
+  function findDomain(domainId) {
+    for (const cat of categoryIds()) {
+      const hit = domainsFor(cat).find(d => d.id === domainId);
+      if (hit) return { ...hit, category: cat };
+    }
+    return null;
+  }
+
+  function postJson(url, body) {
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (!data || !data.success) throw new Error((data && data.error) || 'Request failed');
+        return data;
+      });
+  }
+
+  function init() {
+    cacheDom();
+    initTheme();
+    bindEvents();
+    loadData();
+  }
+
+  function cacheDom() {
+    el.searchInput = document.getElementById('searchInput');
+    el.searchClear = document.getElementById('searchClear');
+    el.topicScopeSelect = document.getElementById('topicScopeSelect');
+    el.topicFacetList = document.getElementById('topicFacetList');
+    el.topicTotalCount = document.getElementById('topicTotalCount');
+    el.categoryBar = document.getElementById('categoryBar');
+    el.topicTabs = document.getElementById('topicTabs');
+    el.typeFacetList = document.getElementById('typeFacetList');
+    el.tagFacetList = document.getElementById('tagFacetList');
+
+    el.metricsGrid = document.getElementById('metricsGrid');
+
+    el.toggleLayoutBtn = document.getElementById('toggleLayoutBtn');
+    el.layoutToggleIcon = document.getElementById('layoutToggleIcon');
+    el.layoutToggleLabel = document.getElementById('layoutToggleLabel');
+    el.viewGraphBtn = document.getElementById('viewGraphBtn');
+
+    el.cardsView = document.getElementById('cardsView');
+    el.listView = document.getElementById('listView');
+    el.graphView = document.getElementById('graphView');
+    el.resultsCount = document.getElementById('resultsCount');
+    el.activeFilters = document.getElementById('activeFilters');
+    el.shareTopicBtn = document.getElementById('shareTopicBtn');
+    el.shareTopicBtnLabel = document.getElementById('shareTopicBtnLabel');
+
+    // Note Modal
+    el.modalBackdrop = document.getElementById('noteModal');
+    el.modalClose = document.getElementById('modalClose');
+    el.modalTitle = document.getElementById('modalTitle');
+    el.modalPath = document.getElementById('modalPath');
+    el.modalMeta = document.getElementById('modalMeta');
+    el.modalTagEditor = document.getElementById('modalTagEditor');
+    el.modalBody = document.getElementById('modalBody');
+    el.modalRelated = document.getElementById('modalRelated');
+    el.copyPathBtn = document.getElementById('copyPathBtn');
+    el.modalShareBtn = document.getElementById('modalShareBtn');
+    el.modalShareFooterBtn = document.getElementById('modalShareFooterBtn');
+
+    // Share Modal Elements
+    el.shareModal = document.getElementById('shareModal');
+    el.shareModalClose = document.getElementById('shareModalClose');
+    el.shareModalTitle = document.getElementById('shareModalTitle');
+    el.shareModalSubtitle = document.getElementById('shareModalSubtitle');
+    el.shareWebLinkInput = document.getElementById('shareWebLinkInput');
+    el.shareMarkdownPreview = document.getElementById('shareMarkdownPreview');
+    el.sharePromptPreview = document.getElementById('sharePromptPreview');
+    el.shareJsonPreview = document.getElementById('shareJsonPreview');
+
+    // Toast Feedback
+    el.toast = document.getElementById('shToast');
+
+    el.totalNotesStat = document.getElementById('totalNotesStat');
+    el.activeBreadcrumb = document.getElementById('activeBreadcrumb');
+
+    el.themeIcon = document.getElementById('themeIcon');
+    el.themeLabel = document.getElementById('themeLabel');
+
+    el.graphZoomIn = document.getElementById('graphZoomIn');
+    el.graphZoomOut = document.getElementById('graphZoomOut');
+    el.graphCenter = document.getElementById('graphCenter');
+    el.graphPhysics = document.getElementById('graphPhysics');
+    el.graphDetailsCard = document.getElementById('graphDetailsCard');
+  }
+
+  function initTheme() {
+    state.theme = localStorage.getItem('sh_kb_theme') || 'dark';
+    applyTheme(state.theme);
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (el.themeIcon) el.themeIcon.textContent = theme === 'dark' ? '🌙' : '☀️';
+    if (el.themeLabel) el.themeLabel.textContent = theme === 'dark' ? 'Dark' : 'Light';
+    localStorage.setItem('sh_kb_theme', theme);
+    // Each theme declares its own taxonomy and canvas colours, so every value
+    // resolved from CSS has to be dropped and read again.
+    topicColorCache.clear();
+    if (window.graphEngine) window.graphEngine.refreshPalette();
+  }
+
+  window.toggleTheme = function () {
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    applyTheme(state.theme);
+    if (state.notes.length) {
+      renderCategoryNav();
+      renderMetricCards();
+      render();
+      pushGraphData();
+    }
+  };
+
+  let deepLinkApplied = false;
+
+  function loadData() {
+    if (!window.KB_DATA) return;
+
+    state.notes = (window.KB_DATA.notes || []).map(n => ({
+      ...n,
+      tags: [...(n.tags || [])],
+      _searchStr: `${n.title} ${n.summary} ${(n.tags || []).join(' ')} ${n.topic} ${n.type} ${n.category}`.toLowerCase()
+    }));
+
+    state.topics = window.KB_DATA.topics || [];
+    state.types = window.KB_DATA.types || [];
+    state.tags = window.KB_DATA.tags || [];
+    state.taxonomy = window.KB_DATA.taxonomy || {};
+    state.categories = window.KB_DATA.categories || [];
+    state.defaultCategory = window.KB_DATA.defaultCategory || (state.categories[0] && state.categories[0].id) || 'general';
+
+    if (el.totalNotesStat) el.totalNotesStat.textContent = state.notes.length;
+
+    renderCategoryNav();
+    renderMetricCards();
+    renderFacets();
+    initGraph();
+
+    // Deep-link only on first load — a reload after a write must not reopen a stale note id
+    if (!deepLinkApplied) {
+      deepLinkApplied = true;
+      parseUrlDeepLink();
+    }
+
+    render();
+  }
+
+  // Parse deep-link query parameters on page load
+  function parseUrlDeepLink() {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hash = window.location.hash.replace(/^#/, '');
+
+      let noteIdToOpen = urlParams.get('note') || urlParams.get('id');
+      if (!noteIdToOpen && hash.startsWith('note=')) {
+        noteIdToOpen = hash.substring(5);
+      } else if (!noteIdToOpen && hash.startsWith('note/')) {
+        noteIdToOpen = hash.substring(5);
+      }
+
+      const catParam = urlParams.get('cat') || urlParams.get('category');
+      const topicParam = urlParams.get('topic');
+      const typeParam = urlParams.get('type');
+      const tagParam = urlParams.get('tag');
+      const queryParam = urlParams.get('q') || urlParams.get('query') || urlParams.get('search');
+
+      const cat = catParam && catParam.toLowerCase();
+      if (cat && (cat === 'all' || categoryIds().includes(cat))) {
+        state.selectedCategory = cat;
+      }
+      if (topicParam && state.topics.includes(topicParam)) {
+        state.selectedTopic = topicParam;
+      }
+      if (typeParam && state.types.includes(typeParam)) {
+        state.selectedType = typeParam;
+      }
+      if (tagParam && state.tags.includes(tagParam)) {
+        state.selectedTag = tagParam;
+      }
+      if (queryParam) {
+        state.searchQuery = queryParam;
+        if (el.searchInput) el.searchInput.value = queryParam;
+        if (el.searchClear) el.searchClear.classList.remove('hidden');
+      }
+
+      if (noteIdToOpen) {
+        setTimeout(() => {
+          openNote(noteIdToOpen);
+        }, 50);
+      }
+    } catch (e) {
+      console.warn('[URL Deep Link]', e);
+    }
+  }
+
+  // Update browser address bar dynamically for shareable URLs
+  function syncBrowserUrl() {
+    try {
+      const params = new URLSearchParams();
+      if (state.currentNote) {
+        params.set('note', state.currentNote.id);
+      } else {
+        if (state.selectedCategory && state.selectedCategory !== 'all') {
+          params.set('cat', state.selectedCategory);
+        }
+        if (state.selectedTopic && state.selectedTopic !== 'All') {
+          params.set('topic', state.selectedTopic);
+        }
+        if (state.selectedType && state.selectedType !== 'All') {
+          params.set('type', state.selectedType);
+        }
+        if (state.selectedTag) {
+          params.set('tag', state.selectedTag);
+        }
+        if (state.searchQuery) {
+          params.set('q', state.searchQuery);
+        }
+      }
+
+      const queryString = params.toString();
+      const newUrl = queryString ? `${window.location.pathname}?${queryString}` : window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    } catch (e) {
+      // Ignored for local restricted file:// environments
+    }
+  }
+
+  function getBaseUrl() {
+    const loc = window.location;
+    if (loc.protocol === 'file:') {
+      return loc.href.split('?')[0].split('#')[0];
+    }
+    return loc.origin + loc.pathname;
+  }
+
+  // Sidebar nav and metric cards are built from the payload categories, so a new
+  // top-level category shows up everywhere without touching markup or CSS.
+  function renderCategoryNav() {
+    if (!el.categoryBar) return;
+
+    const item = (id, label) => `
+      <button class="nav-cat-item" data-cat="${id}" onclick="window.selectCategory('${id}')" style="--cat-accent:${categoryColor(id)};">
+        <div class="nav-cat-left">
+          <span class="cat-dot"></span>
+          <span>${escapeHtml(label)}</span>
+        </div>
+        <span class="nav-cat-badge" data-count="${id}">0</span>
+      </button>
+    `;
+
+    el.categoryBar.innerHTML = item('all', 'All Knowledge') +
+      state.categories.map(c => item(c.id, c.name)).join('');
+  }
+
+  function renderMetricCards() {
+    if (!el.metricsGrid) return;
+
+    const totalCard = `
+      <div class="metric-card metric-primary" onclick="window.selectCategory('all')">
+        <div class="metric-header">
+          <span class="metric-title">Total Knowledge Assets</span>
+          <div class="metric-icon-box">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            </svg>
+          </div>
+        </div>
+        <div class="metric-body">
+          <div class="metric-value" data-metric="all">—</div>
+          <div class="metric-trend trend-up">
+            <span class="trend-label">Indexed, linked & searchable</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const categoryCards = state.categories.map(c => {
+      const domains = domainsFor(c.id).map(d => d.name);
+      const caption = domains.length > 1 ? domains.slice(0, 3).join(' • ') : (domains[0] || c.name);
+      return `
+        <div class="metric-card" onclick="window.selectCategory('${c.id}')" style="--cat-accent:${categoryColor(c.id)};">
+          <div class="metric-header">
+            <span class="metric-title">${escapeHtml(c.name)}</span>
+            <div class="metric-icon-box">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+              </svg>
+            </div>
+          </div>
+          <div class="metric-body">
+            <div class="metric-value" data-metric="${c.id}">—</div>
+            <div class="metric-trend">
+              <span class="badge-pill">${escapeHtml(caption)}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    el.metricsGrid.innerHTML = totalCard + categoryCards;
+  }
+
+  function renderFacets() {
+    const q = state.searchQuery.toLowerCase();
+
+    // Notes filtered by search query
+    const searchFilteredNotes = q 
+      ? state.notes.filter(n => n._searchStr.includes(q))
+      : state.notes;
+
+    // 0. Update Category Bar Button Counts & Active States
+    const catCounts = { all: searchFilteredNotes.length };
+    state.categories.forEach(c => {
+      catCounts[c.id] = searchFilteredNotes.filter(n => n.category === c.id).length;
+    });
+
+    if (el.categoryBar) {
+      el.categoryBar.querySelectorAll('.nav-cat-item').forEach(btn => {
+        const id = btn.dataset.cat;
+        btn.classList.toggle('active', id === state.selectedCategory);
+        const badge = btn.querySelector('.nav-cat-badge');
+        if (badge) badge.textContent = catCounts[id] || 0;
+      });
+    }
+
+    if (el.metricsGrid) {
+      el.metricsGrid.querySelectorAll('.metric-value').forEach(box => {
+        const id = box.dataset.metric;
+        box.textContent = id === 'all' ? state.notes.length : (catCounts[id] || 0);
+      });
+    }
+
+    if (el.activeBreadcrumb) {
+      el.activeBreadcrumb.textContent = state.selectedTopic !== 'All'
+        ? `${categoryName(state.selectedCategory)} / ${state.selectedTopic}`
+        : categoryName(state.selectedCategory);
+    }
+
+    // Notes filtered by Category
+    const catFilteredNotes = searchFilteredNotes.filter(n => {
+      if (state.selectedCategory !== 'all' && n.category !== state.selectedCategory) return false;
+      return true;
+    });
+
+    // Notes filtered by search query AND category AND topic
+    const topicFilteredNotes = catFilteredNotes.filter(n => {
+      if (state.selectedTopic !== 'All' && n.topic !== state.selectedTopic) return false;
+      return true;
+    });
+
+    // 1. Dynamic Top Navigation Tabs (Topic Tabs)
+    if (el.topicTabs) {
+      const availableTopics = Array.from(new Set(catFilteredNotes.map(n => n.topic))).sort();
+      let tabsHtml = `<div class="sh-nav-tab ${state.selectedTopic === 'All' ? 'active' : ''}" data-topic="All" onclick="window.selectTopic('All')">All in Category (${catFilteredNotes.length})</div>`;
+      availableTopics.forEach(t => {
+        const count = catFilteredNotes.filter(n => n.topic === t).length;
+        tabsHtml += `<div class="sh-nav-tab ${state.selectedTopic === t ? 'active' : ''}" data-topic="${escapeHtml(t)}" onclick="window.selectTopic('${escapeHtml(t)}')">${escapeHtml(t)} (${count})</div>`;
+      });
+      el.topicTabs.innerHTML = tabsHtml;
+    }
+
+    // 2. Interactive Topic Domains List in Sidebar
+    const topicCounts = {};
+    searchFilteredNotes.forEach(n => { topicCounts[n.topic] = (topicCounts[n.topic] || 0) + 1; });
+
+    if (el.topicFacetList) {
+      const allAvailableTopics = state.topics.map(t => {
+        const sample = state.notes.find(n => n.topic === t);
+        const count = catFilteredNotes.filter(n => n.topic === t).length;
+        return { name: t, color: topicColor(sample && sample.domain), count };
+      }).filter(t => state.selectedCategory === 'all' || t.count > 0);
+
+      let topicListHtml = `
+        <button class="nav-topic-item ${state.selectedTopic === 'All' ? 'active' : ''}" onclick="window.selectTopic('All')">
+          <div class="nav-topic-left">
+            <span class="topic-dot"></span>
+            <span class="topic-name">All Topics</span>
+          </div>
+          <span class="nav-topic-badge">${catFilteredNotes.length}</span>
+        </button>
+      `;
+
+      allAvailableTopics.forEach(t => {
+        const isActive = state.selectedTopic === t.name;
+        topicListHtml += `
+          <button class="nav-topic-item ${isActive ? 'active' : ''}" onclick="window.selectTopic('${escapeHtml(t.name)}')">
+            <div class="nav-topic-left">
+              <span class="topic-dot" style="--topic-accent:${t.color};"></span>
+              <span class="topic-name">${escapeHtml(t.name)}</span>
+            </div>
+            <span class="nav-topic-badge">${t.count}</span>
+          </button>
+        `;
+      });
+
+      el.topicFacetList.innerHTML = topicListHtml;
+      if (el.topicTotalCount) el.topicTotalCount.textContent = allAvailableTopics.length;
+    }
+
+    // 3. Scope Select & Topic Domains Sidebar Dropdown
+    const optionsHtml = `<option value="All">All Topics (${searchFilteredNotes.length})</option>` +
+      state.topics.map(t => {
+        const count = topicCounts[t] || 0;
+        return `<option value="${escapeHtml(t)}" ${state.selectedTopic === t ? 'selected' : ''}>${escapeHtml(t)} (${count})</option>`;
+      }).join('');
+
+    if (el.topicScopeSelect) {
+      el.topicScopeSelect.innerHTML = optionsHtml;
+      el.topicScopeSelect.value = state.selectedTopic;
+    }
+
+    // Dynamic Graph Legend
+    const graphLegend = document.getElementById('graphLegend');
+    if (graphLegend) {
+      graphLegend.innerHTML = state.topics.slice(0, 8).map(t => {
+        const sample = state.notes.find(n => n.topic === t);
+        const col = topicColor(sample && sample.domain);
+        const count = topicCounts[t] || 0;
+        return `
+          <div class="sh-graph-legend-item" onclick="window.selectTopic('${escapeHtml(t)}')" style="--topic-accent:${col};">
+            <span class="legend-dot"></span> ${escapeHtml(t)} (${count})
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 2. Type Facets
+    if (el.typeFacetList) {
+      const typeCounts = {};
+      topicFilteredNotes.forEach(n => { typeCounts[n.type] = (typeCounts[n.type] || 0) + 1; });
+
+      let typeHtml = `
+        <div class="sh-facet-item ${state.selectedType === 'All' ? 'active' : ''}" onclick="window.selectType('All')">
+          <div class="sh-facet-label-group">
+            <input type="radio" class="sh-facet-checkbox" name="facet_type" ${state.selectedType === 'All' ? 'checked' : ''}>
+            <span>All Types</span>
+          </div>
+          <span class="sh-facet-count">${topicFilteredNotes.length}</span>
+        </div>
+      `;
+
+      state.types.forEach(tp => {
+        const count = typeCounts[tp] || 0;
+        const isActive = state.selectedType === tp;
+        typeHtml += `
+          <div class="sh-facet-item ${isActive ? 'active' : ''}" onclick="window.selectType('${escapeHtml(tp)}')">
+            <div class="sh-facet-label-group">
+              <input type="radio" class="sh-facet-checkbox" name="facet_type" ${isActive ? 'checked' : ''}>
+              <span>${capitalize(tp)}</span>
+            </div>
+            <span class="sh-facet-count">${count}</span>
+          </div>
+        `;
+      });
+      el.typeFacetList.innerHTML = typeHtml;
+    }
+
+    // 3. Tag Cloud Facets
+    if (el.tagFacetList) {
+      const tagCounts = {};
+      topicFilteredNotes.forEach(n => {
+        n.tags.forEach(tg => { tagCounts[tg] = (tagCounts[tg] || 0) + 1; });
+      });
+
+      const sortedTags = Object.keys(tagCounts).sort((a, b) => tagCounts[b] - tagCounts[a]).slice(0, 14);
+      el.tagFacetList.innerHTML = sortedTags.map(tg => `
+        <span class="sh-facet-tag ${state.selectedTag === tg ? 'active' : ''}" onclick="window.toggleTag('${escapeHtml(tg)}')">
+          #${escapeHtml(tg)} (${tagCounts[tg]})
+        </span>
+      `).join('');
+    }
+
+    // Update Share Topic button label
+    if (el.shareTopicBtnLabel) {
+      el.shareTopicBtnLabel.textContent = state.selectedTopic === 'All' ? 'Share All Topics' : `Share ${state.selectedTopic}`;
+    }
+  }
+
+  function initGraph() {
+    if (!el.graphView) return;
+    window.graphEngine = new KnowledgeGraph('graphView', {
+      onNodeClick: (node) => {
+        if (!node) {
+          if (el.graphDetailsCard) el.graphDetailsCard.classList.remove('active');
+          return;
+        }
+        if (node.isHub) {
+          window.selectTopic(node.topic);
+        } else {
+          showGraphNodeCard(node);
+        }
+      },
+      onNodeDoubleClick: (node) => {
+        if (node && !node.isHub && node.noteId) {
+          openNote(node.noteId);
+        }
+      }
+    });
+
+    pushGraphData();
+  }
+
+  // Node colours are resolved from the CSS taxonomy palette, so they are stamped
+  // here rather than shipped in the payload — and restamped on theme change.
+  function pushGraphData() {
+    if (!window.graphEngine) return;
+    const graph = window.KB_DATA.graph || { nodes: [], edges: [] };
+    window.graphEngine.setData({
+      ...window.KB_DATA,
+      graph: {
+        nodes: graph.nodes.map(n => ({ ...n, color: topicColor(n.domain) })),
+        edges: graph.edges
+      }
+    });
+  }
+
+  function showGraphNodeCard(node) {
+    if (!el.graphDetailsCard) return;
+    const note = state.notes.find(n => n.id === node.noteId);
+    if (!note) return;
+
+    el.graphDetailsCard.innerHTML = `
+      <div class="graph-detail-title">${escapeHtml(note.title)}</div>
+      <div class="graph-detail-badges">
+        <span class="sh-topic-badge" style="--topic-accent:${topicColor(note.domain)};">${note.topic}</span>
+        <span class="sh-type-pill">${note.type}</span>
+      </div>
+      <p class="graph-detail-summary">${escapeHtml(note.summary)}</p>
+      <div class="graph-detail-actions">
+        <button class="btn-node-open" onclick="window.openNoteById('${note.id}')">Open Note</button>
+        <button class="btn-node-share" onclick="window.openShareModal('note', '${note.id}')" title="Share & Ingest Note">🔗</button>
+      </div>
+    `;
+    el.graphDetailsCard.classList.add('active');
+  }
+
+    // Search input (instant debounced)
+    let searchTimer = null;
+    if (el.searchInput) {
+      el.searchInput.addEventListener('input', (e) => {
+        const val = e.target.value;
+        if (el.searchClear) {
+          el.searchClear.classList.toggle('hidden', !val);
+        }
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          state.searchQuery = val.trim();
+          syncBrowserUrl();
+          render(true);
+        }, 40);
+      });
+    }
+
+    if (el.searchClear) {
+      el.searchClear.addEventListener('click', () => {
+        state.searchQuery = '';
+        el.searchInput.value = '';
+        el.searchClear.classList.add('hidden');
+        el.searchInput.focus();
+        syncBrowserUrl();
+        render();
+      });
+    }
+
+    // Top Navigation Tabs
+    if (el.topicTabs) {
+      el.topicTabs.addEventListener('click', (e) => {
+        const tab = e.target.closest('.sh-nav-tab');
+        if (!tab) return;
+        window.selectTopic(tab.dataset.topic);
+      });
+    }
+
+    // Keyboard shortcut: '/' focuses search, 'Escape' closes modal/search
+    window.addEventListener('keydown', (e) => {
+      if (e.key === '/' && document.activeElement !== el.searchInput && !state.currentNote && !isShareModalOpen()) {
+        e.preventDefault();
+        el.searchInput.focus();
+      } else if (e.key === 'Escape') {
+        if (isShareModalOpen()) {
+          window.closeShareModal();
+        } else if (state.currentNote) {
+          closeModal();
+        } else if (state.searchQuery) {
+          state.searchQuery = '';
+          el.searchInput.value = '';
+          if (el.searchClear) el.searchClear.classList.add('hidden');
+          syncBrowserUrl();
+          render();
+        }
+      }
+    });
+
+    // Graph Controls
+    if (el.graphZoomIn) el.graphZoomIn.addEventListener('click', () => window.graphEngine && window.graphEngine.zoomIn());
+    if (el.graphZoomOut) el.graphZoomOut.addEventListener('click', () => window.graphEngine && window.graphEngine.zoomOut());
+    if (el.graphCenter) el.graphCenter.addEventListener('click', () => window.graphEngine && window.graphEngine.centerGraph());
+    if (el.graphPhysics) el.graphPhysics.addEventListener('click', () => window.graphEngine && window.graphEngine.togglePhysics());
+
+    // Modal Close
+    if (el.modalClose) el.modalClose.addEventListener('click', closeModal);
+    if (el.modalBackdrop) {
+      el.modalBackdrop.addEventListener('click', (e) => {
+        if (e.target === el.modalBackdrop) closeModal();
+      });
+    }
+
+    // Copy Relative Path
+    if (el.copyPathBtn) {
+      el.copyPathBtn.addEventListener('click', () => {
+        if (state.currentNote) {
+          navigator.clipboard.writeText(state.currentNote.relPath).then(() => {
+            window.showToast(`Copied relative path: ${state.currentNote.relPath}`);
+          });
+        }
+      });
+    }
+
+    // Note Modal Share triggers
+    if (el.modalShareBtn) {
+      el.modalShareBtn.addEventListener('click', () => {
+        if (state.currentNote) window.openShareModal('note', state.currentNote.id);
+      });
+    }
+    if (el.modalShareFooterBtn) {
+      el.modalShareFooterBtn.addEventListener('click', () => {
+        if (state.currentNote) window.openShareModal('note', state.currentNote.id);
+      });
+    }
+
+    // Share Modal Backdrop click
+    if (el.shareModal) {
+      el.shareModal.addEventListener('click', (e) => {
+        if (e.target === el.shareModal) window.closeShareModal();
+      });
+    }
+  }
+
+  function isShareModalOpen() {
+    return el.shareModal && el.shareModal.classList.contains('active');
+  }
+
+  window.selectCategory = function (category) {
+    state.selectedCategory = category.toLowerCase();
+    state.selectedTopic = 'All'; // reset topic when changing category
+    syncBrowserUrl();
+    renderFacets();
+    render();
+  };
+
+  window.selectTopic = function (topic) {
+    state.selectedTopic = topic;
+
+    if (window.graphEngine) {
+      window.graphEngine.filterByTopic(topic);
+    }
+
+    syncBrowserUrl();
+    renderFacets();
+    render();
+  };
+
+  window.selectType = function (type) {
+    state.selectedType = type;
+    syncBrowserUrl();
+    renderFacets();
+    render();
+  };
+
+  window.toggleTag = function (tag) {
+    state.selectedTag = state.selectedTag === tag ? null : tag;
+    syncBrowserUrl();
+    renderFacets();
+    render();
+  };
+
+  window.toggleCardListView = function () {
+    if (state.viewMode === 'graph') {
+      setViewMode(state.currentLayout || 'card');
+    } else if (state.viewMode === 'card') {
+      setViewMode('list');
+    } else {
+      setViewMode('card');
+    }
+  };
+
+  window.toggleGraphView = function () {
+    if (state.viewMode === 'graph') {
+      setViewMode(state.currentLayout || 'card');
+    } else {
+      setViewMode('graph');
+    }
+  };
+
+  window.switchView = function (mode) {
+    setViewMode(mode);
+  };
+
+  function setViewMode(mode) {
+    state.viewMode = mode;
+    if (mode === 'card' || mode === 'list') {
+      state.currentLayout = mode;
+    }
+
+    const isGraph = mode === 'graph';
+    const isList = mode === 'list';
+    const isCard = mode === 'card';
+
+    // Update Single Toggle Button
+    if (el.toggleLayoutBtn) {
+      el.toggleLayoutBtn.classList.toggle('active', !isGraph);
+      if (el.layoutToggleLabel) {
+        el.layoutToggleLabel.textContent = isCard ? 'List View' : 'Cards View';
+      }
+      if (el.layoutToggleIcon) {
+        if (isCard) {
+          el.layoutToggleIcon.innerHTML = `
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
+          `;
+        } else {
+          el.layoutToggleIcon.innerHTML = `
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+            </svg>
+          `;
+        }
+      }
+    }
+
+    // Update Knowledge Graph Button
+    if (el.viewGraphBtn) {
+      el.viewGraphBtn.classList.toggle('active', isGraph);
+    }
+
+    if (el.cardsView) el.cardsView.classList.toggle('hidden', !isCard);
+    if (el.listView) el.listView.classList.toggle('hidden', !isList);
+    if (el.graphView) el.graphView.classList.toggle('hidden', !isGraph);
+
+    if (window.graphEngine) {
+      if (isGraph) {
+        window.graphEngine.onShow();
+      } else {
+        window.graphEngine.onHide();
+      }
+    }
+
+    render();
+  }
+
+  function getFilteredNotes() {
+    const q = state.searchQuery.toLowerCase();
+
+    return state.notes.filter(note => {
+      if (state.selectedCategory !== 'all' && note.category !== state.selectedCategory) return false;
+      if (state.selectedTopic !== 'All' && note.topic !== state.selectedTopic) return false;
+      if (state.selectedType !== 'All' && note.type !== state.selectedType) return false;
+      if (state.selectedTag && !note.tags.includes(state.selectedTag)) return false;
+      if (q && !note._searchStr.includes(q)) return false;
+      return true;
+    });
+  }
+
+  function render(skipFacets = false) {
+    const filtered = getFilteredNotes();
+
+    if (el.resultsCount) {
+      el.resultsCount.innerHTML = `Showing <strong>${filtered.length}</strong> of <strong>${state.notes.length}</strong> knowledge assets`;
+    }
+
+    renderActiveFilters();
+
+    if (!skipFacets) {
+      renderFacets();
+    }
+
+    if (state.viewMode === 'card') {
+      renderCards(filtered);
+    } else if (state.viewMode === 'list') {
+      renderList(filtered);
+    }
+  }
+
+  function renderActiveFilters() {
+    if (!el.activeFilters) return;
+    const chips = [];
+
+    if (state.selectedCategory !== 'all') {
+      chips.push(`Category: <strong>${escapeHtml(categoryName(state.selectedCategory))}</strong> <span class="sh-filter-chip-del" onclick="window.selectCategory('all')">✕</span>`);
+    }
+    if (state.selectedTopic !== 'All') {
+      chips.push(`Topic: <strong>${state.selectedTopic}</strong> <span class="sh-filter-chip-del" onclick="window.selectTopic('All')">✕</span>`);
+    }
+    if (state.selectedType !== 'All') {
+      chips.push(`Type: <strong>${capitalize(state.selectedType)}</strong> <span class="sh-filter-chip-del" onclick="window.selectType('All')">✕</span>`);
+    }
+    if (state.selectedTag) {
+      chips.push(`Tag: <strong>#${state.selectedTag}</strong> <span class="sh-filter-chip-del" onclick="window.toggleTag('${state.selectedTag}')">✕</span>`);
+    }
+    if (state.searchQuery) {
+      chips.push(`Query: <strong>"${escapeHtml(state.searchQuery)}"</strong> <span class="sh-filter-chip-del" onclick="window.clearSearch()">✕</span>`);
+    }
+
+    el.activeFilters.innerHTML = chips.map(c => `<span class="sh-filter-chip">${c}</span>`).join('');
+  }
+
+  window.clearSearch = function () {
+    state.searchQuery = '';
+    if (el.searchInput) el.searchInput.value = '';
+    if (el.searchClear) el.searchClear.classList.add('hidden');
+    syncBrowserUrl();
+    render();
+  };
+
+  window.clearAllFilters = function () {
+    state.selectedCategory = 'all';
+    state.selectedTopic = 'All';
+    state.selectedType = 'All';
+    state.selectedTag = null;
+    state.searchQuery = '';
+    if (el.searchInput) el.searchInput.value = '';
+    if (el.searchClear) el.searchClear.classList.add('hidden');
+    if (window.graphEngine) window.graphEngine.filterByTopic('All');
+    syncBrowserUrl();
+    renderFacets();
+    render();
+  };
+
+  // 1. Render Cards View
+  function renderCards(notes) {
+    if (!el.cardsView) return;
+
+    if (notes.length === 0) {
+      el.cardsView.innerHTML = `
+        <div class="sh-empty-view">
+          <h3>No matching knowledge assets found</h3>
+          <p>Try clearing filters or refining your search term.</p>
+        </div>
+      `;
+      return;
+    }
+
+    el.cardsView.innerHTML = notes.map(note => {
+      const color = topicColor(note.domain);
+      const highlightedTitle = highlightText(note.title, state.searchQuery);
+      const highlightedSummary = highlightText(note.summary, state.searchQuery);
+
+      const tagsHtml = note.tags.slice(0, 4).map(t => 
+        `<span class="sh-card-tag-item" onclick="event.stopPropagation(); window.toggleTag('${escapeHtml(t)}')">#${escapeHtml(t)}</span>`
+      ).join('');
+
+      return `
+        <div class="sh-result-card" onclick="window.openNoteById('${note.id}')" style="--card-accent: ${color}; --topic-accent: ${color}; --cat-accent: ${categoryColor(note.category)};">
+          <div>
+            <div class="sh-card-top">
+              <div class="sh-card-badges">
+                <span class="sh-badge-category">● ${note.categoryName}</span>
+                <span class="sh-topic-badge">${note.topic}</span>
+              </div>
+              <span class="sh-type-pill">${note.type}</span>
+            </div>
+            <h3 class="sh-card-title">${highlightedTitle}</h3>
+            <p class="sh-card-snippet">${highlightedSummary}</p>
+          </div>
+          <div>
+            <div class="sh-card-tags-list">${tagsHtml}</div>
+            <div class="sh-card-bottom">
+              <span>Updated: ${note.updated}</span>
+              <div class="sh-card-actions">
+                <button class="sh-card-share-btn" onclick="event.stopPropagation(); window.openShareModal('note', '${note.id}')" title="Share & Ingest Note">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                  </svg>
+                  <span>Share</span>
+                </button>
+                <div class="sh-card-open-link">
+                  <span>View</span>
+                  <span>→</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 2. Render List View
+  function renderList(notes) {
+    if (!el.listView) return;
+
+    if (notes.length === 0) {
+      el.listView.innerHTML = `
+        <div class="sh-empty-view">
+          <h3>No matching knowledge assets found</h3>
+          <p>Try clearing filters or refining your search term.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const rows = notes.map(note => {
+      const color = topicColor(note.domain);
+      const highlightedTitle = highlightText(note.title, state.searchQuery);
+      const tagsHtml = note.tags.slice(0, 3).map(t => `<span class="sh-card-tag-item">#${escapeHtml(t)}</span>`).join(' ');
+
+      return `
+        <tr onclick="window.openNoteById('${note.id}')" style="--topic-accent: ${color}; --cat-accent: ${categoryColor(note.category)};">
+          <td>
+            <div class="sh-table-title">${highlightedTitle}</div>
+            <div class="sh-table-path">${escapeHtml(note.relPath)}</div>
+          </td>
+          <td class="col-category"><span class="sh-badge-category">● ${note.categoryName}</span></td>
+          <td class="col-topic"><span class="sh-topic-badge">${note.topic}</span></td>
+          <td class="col-type"><span class="sh-type-pill">${note.type}</span></td>
+          <td class="col-tags">${tagsHtml}</td>
+          <td class="col-updated">${note.updated}</td>
+          <td class="col-actions">
+            <button class="btn-row-share" onclick="event.stopPropagation(); window.openShareModal('note', '${note.id}')" title="Share & Ingest Note">Share</button>
+            <button class="btn-row-open">Open</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    el.listView.innerHTML = `
+      <table class="sh-data-table">
+        <thead>
+          <tr>
+            <th>Title & Path</th>
+            <th class="col-category">Category</th>
+            <th class="col-topic">Topic</th>
+            <th class="col-type">Type</th>
+            <th class="col-tags">Tags</th>
+            <th class="col-updated">Updated</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    `;
+  }
+
+  // Note Modal (SmartPreview Drawer)
+  function openNote(noteId) {
+    const note = state.notes.find(n => n.id === noteId);
+    if (!note) return;
+
+    state.currentNote = note;
+    syncBrowserUrl();
+
+    if (el.modalTitle) el.modalTitle.textContent = note.title;
+    if (el.modalPath) el.modalPath.textContent = note.relPath;
+
+    if (el.modalMeta) {
+      const topicSelectHtml = state.categories.map(cat => `
+        <optgroup label="${escapeHtml(cat.name)}">
+          ${domainsFor(cat.id).map(d => `
+            <option value="${d.id}" ${note.domain === d.id ? 'selected' : ''}>● ${escapeHtml(d.name)}</option>
+          `).join('')}
+        </optgroup>
+      `).join('');
+
+      el.modalMeta.innerHTML = `
+        <div class="sh-category-picker-group" title="Manually change note category">
+          <span class="sh-cat-picker-label">Category:</span>
+          <select class="sh-cat-picker-select" onchange="window.changeNoteCategory('${note.id}', this.value)">
+            ${categoryOptionsHtml(note.category)}
+          </select>
+        </div>
+        <div class="sh-category-picker-group" title="Manually change note topic / domain">
+          <span class="sh-cat-picker-label">Topic:</span>
+          <select class="sh-cat-picker-select" onchange="window.changeNoteTopic('${note.id}', this.value)">
+            ${topicSelectHtml}
+          </select>
+        </div>
+        <span>Type: <strong>${note.type}</strong></span>
+        <span>Status: <strong>${note.status}</strong></span>
+        <span>Words: <strong>${note.wordCount}</strong></span>
+        <span>Updated: <strong>${note.updated}</strong></span>
+      `;
+    }
+
+    renderModalTags(note);
+
+    if (el.modalBody) {
+      el.modalBody.innerHTML = `
+        <div id="modalCategoryMovePanel"></div>
+        <div class="sh-markdown-content">
+          ${renderMarkdown(note.bodyContent)}
+        </div>
+      `;
+    }
+
+    if (el.modalRelated) {
+      if (note.related && note.related.length > 0) {
+        el.modalRelated.innerHTML = note.related.map(rel => {
+          const cleanRel = rel.replace(/^\[\[/, '').replace(/\]\]$/, '');
+          const target = state.notes.find(n => 
+            n.filename.replace(/\.md$/, '').toLowerCase() === cleanRel.toLowerCase() ||
+            n.title.toLowerCase() === cleanRel.toLowerCase() ||
+            n.relPath.toLowerCase().includes(cleanRel.toLowerCase())
+          );
+          if (target) {
+            return `<a class="sh-related-pill-link" href="javascript:void(0)" onclick="window.openNoteById('${target.id}')">📄 ${escapeHtml(target.title)}</a>`;
+          }
+          return `<span class="sh-type-pill">[[${escapeHtml(cleanRel)}]]</span>`;
+        }).join('');
+      } else {
+        el.modalRelated.innerHTML = '';
+      }
+    }
+
+    if (el.modalBackdrop) {
+      el.modalBackdrop.classList.add('active');
+    }
+  }
+
+  // =========================================================================
+  // Tag Editor Rendering & Management
+  // =========================================================================
+
+  function renderModalTags(note) {
+    if (!el.modalTagEditor) return;
+    const tags = note.tags || [];
+    const tagsHtml = tags.map(tg => `
+      <span class="sh-tag-edit-pill">
+        #${escapeHtml(tg)}
+        <span class="sh-tag-del-btn" onclick="window.removeNoteTag('${note.id}', '${escapeHtml(tg)}')" title="Remove tag">✕</span>
+      </span>
+    `).join('');
+
+    el.modalTagEditor.innerHTML = `
+      <span class="sh-tag-editor-label">Tags:</span>
+      ${tagsHtml}
+      <div class="sh-tag-add-group">
+        <input type="text" id="newTagInput" class="sh-tag-add-input" placeholder="Add tag..." onkeydown="if(event.key==='Enter'){window.addNoteTag('${note.id}');}" />
+        <button class="sh-tag-add-btn" onclick="window.addNoteTag('${note.id}')">+ Add</button>
+      </div>
+    `;
+  }
+
+  window.addNoteTag = function (noteId) {
+    const note = state.notes.find(n => n.id === noteId);
+    if (!note) return;
+
+    const input = document.getElementById('newTagInput');
+    if (!input) return;
+
+    const rawVal = input.value.trim().replace(/^#/, '').toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+    if (!rawVal) return;
+
+    input.value = '';
+    if (note.tags.includes(rawVal)) return;
+
+    saveNoteTags(note, note.tags.concat(rawVal), `Tag added: #${rawVal}`);
+  };
+
+  window.removeNoteTag = function (noteId, tagToRemove) {
+    const note = state.notes.find(n => n.id === noteId);
+    if (!note) return;
+
+    saveNoteTags(note, note.tags.filter(t => t !== tagToRemove), `Tag removed: #${tagToRemove}`);
+  };
+
+  // The markdown file is the source of truth: apply optimistically, then revert
+  // the in-memory note if the server rejects the write.
+  function saveNoteTags(note, tags, successMessage) {
+    const previous = note.tags;
+    applyNoteTags(note, tags);
+
+    postJson('./api/update-tags', { relPath: note.relPath, tags })
+      .then(() => window.showToast(successMessage))
+      .catch(err => {
+        applyNoteTags(note, previous);
+        window.showToast(`Could not save tags: ${err.message}`, 4000);
+      });
+  }
+
+  function applyNoteTags(note, tags) {
+    note.tags = tags;
+    note._searchStr = `${note.title} ${note.summary} ${tags.join(' ')} ${note.topic} ${note.type} ${note.category}`.toLowerCase();
+    state.tags = [...new Set(state.notes.flatMap(n => n.tags))].sort();
+    renderModalTags(note);
+    renderFacets();
+    render(true);
+  }
+
+  // =========================================================================
+  // Manual Topic & Category Change & File Move Mechanism
+  // =========================================================================
+
+  window.changeNoteTopic = function (noteId, newDomain) {
+    const note = state.notes.find(n => n.id === noteId);
+    const target = findDomain(newDomain);
+    if (!note || !target) return;
+
+    moveNote(note, target.category, newDomain, `Topic changed to "${target.name}"`);
+  };
+
+  window.changeNoteCategory = function (noteId, newCategory) {
+    const note = state.notes.find(n => n.id === noteId);
+    if (!note || note.category === newCategory) return;
+
+    const keepsDomain = domainsFor(newCategory).some(d => d.id === note.domain);
+    moveNote(note, newCategory, keepsDomain ? note.domain : '', `Category changed to "${categoryName(newCategory)}"`);
+  };
+
+  // The server rewrites the frontmatter, moves the file and rebuilds the payload,
+  // so reload from it instead of patching the note in place — the id changes too.
+  function moveNote(note, category, domain, successMessage) {
+    const dir = domain && domain !== category ? `knowledge/${category}/${domain}` : `knowledge/${category}`;
+
+    postJson('./api/change-category', {
+      oldPath: note.relPath,
+      newPath: `${dir}/${note.filename}`,
+      category: category,
+      domain: domain
+    })
+      .then(data => {
+        window.showToast(`${successMessage} — now at ${data.path}`, 3500);
+        window.reloadKnowledgeData(() => openNote(data.note_id));
+      })
+      .catch(err => window.showToast(`Could not move note: ${err.message}`, 4000));
+  }
+
+  window.copyText = function (text) {
+    navigator.clipboard.writeText(text).then(() => {
+      window.showToast('Copied to clipboard!');
+    });
+  };
+
+  window.openNoteById = function (id) {
+    openNote(id);
+  };
+
+  function closeModal() {
+    state.currentNote = null;
+    syncBrowserUrl();
+    if (el.modalBackdrop) {
+      el.modalBackdrop.classList.remove('active');
+    }
+  }
+
+  // =========================================================================
+  // Share & Knowledge Base Ingestion System
+  // =========================================================================
+
+  function generateNoteSharePayload(note) {
+    const baseUrl = getBaseUrl();
+    const deepLink = `${baseUrl}?note=${encodeURIComponent(note.id)}`;
+
+    // 1. Standard YAML Frontmatter + Markdown Body
+    const tagsYaml = note.tags && note.tags.length ? `\ntags:\n${note.tags.map(t => `  - "${t}"`).join('\n')}` : '\ntags: []';
+    const relatedYaml = note.related && note.related.length ? `\nrelated:\n${note.related.map(r => `  - "${r}"`).join('\n')}` : '\nrelated: []';
+
+    const markdownPayload = `---
+title: "${note.title.replace(/"/g, '\\"')}"
+domain: "${note.domain}"
+type: "${note.type}"${tagsYaml}
+created: ${note.created}
+updated: ${note.updated}
+status: ${note.status}
+summary: "${(note.summary || '').replace(/"/g, '\\"')}"
+source_rel_path: "${note.relPath}"
+source_url: "${deepLink}"${relatedYaml}
+---
+
+# ${note.title}
+
+${note.bodyContent.trim()}
+`;
+
+    // 2. AI / LLM Ingestion Prompt
+    const aiPromptPayload = `You are an AI Knowledge Base Librarian and Second Brain Assistant.
+Please ingest and synthesize the following knowledge asset into the target knowledge base under domain "${note.domain}".
+
+============================================================
+ASSET METADATA:
+- Title: ${note.title}
+- Domain: ${note.domain} (${note.topic})
+- Type: ${note.type}
+- Status: ${note.status}
+- Tags: ${(note.tags || []).join(', ')}
+- Relative Path: ${note.relPath}
+- Source Web Link: ${deepLink}
+============================================================
+
+MARKDOWN CONTENT WITH FRONTMATTER:
+
+${markdownPayload}
+
+============================================================
+INGESTION INSTRUCTIONS:
+1. Save this note into the knowledge base under "knowledge/${note.domain}/${note.filename}".
+2. Preserve the full YAML frontmatter for context retrieval.
+3. Update the domain Map of Content ("knowledge/${note.domain}/INDEX.md") and root index.
+4. Establish bi-directional links for all referenced [[wikilinks]].
+============================================================`;
+
+    // 3. JSON Ingest Schema
+    const jsonPayload = JSON.stringify({
+      schema: "https://schema.org/DigitalDocument",
+      ingestFormat: "KarpathyLLMWiki",
+      id: note.id,
+      title: note.title,
+      domain: note.domain,
+      topic: note.topic,
+      type: note.type,
+      status: note.status,
+      created: note.created,
+      updated: note.updated,
+      summary: note.summary,
+      tags: note.tags,
+      related: note.related,
+      relPath: note.relPath,
+      shareUrl: deepLink,
+      wordCount: note.wordCount,
+      body: note.bodyContent
+    }, null, 2);
+
+    return {
+      type: 'note',
+      title: note.title,
+      subtitle: `Note • ${note.relPath}`,
+      filename: note.filename,
+      deepLink,
+      markdown: markdownPayload,
+      prompt: aiPromptPayload,
+      json: jsonPayload
+    };
+  }
+
+  function generateTopicSharePayload(topicName) {
+    const baseUrl = getBaseUrl();
+    const isAll = topicName === 'All';
+    const deepLink = isAll ? baseUrl : `${baseUrl}?topic=${encodeURIComponent(topicName)}`;
+
+    const targetNotes = isAll 
+      ? state.notes 
+      : state.notes.filter(n => n.topic.toLowerCase() === topicName.toLowerCase());
+
+    const titleStr = isAll ? 'Complete Knowledge Base' : `Topic: ${topicName}`;
+    const filename = isAll ? 'knowledge-base-full-digest.md' : `${topicName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-topic-digest.md`;
+
+    // Build Map of Content Table
+    let mocTable = '| Note Title | Type | Status | Summary | Path |\n| :--- | :--- | :--- | :--- | :--- |\n';
+    targetNotes.forEach(n => {
+      const cleanSumm = (n.summary || '').replace(/\|/g, '\\|').replace(/\n/g, ' ').slice(0, 100);
+      mocTable += `| [[${n.title}]] | \`${n.type}\` | ${n.status} | ${cleanSumm}... | \`${n.relPath}\` |\n`;
+    });
+
+    // Build Combined Multi-Note Markdown Digest
+    let notesMarkdownBody = '';
+    targetNotes.forEach((n, idx) => {
+      const noteDeepLink = `${baseUrl}?note=${encodeURIComponent(n.id)}`;
+      notesMarkdownBody += `\n\n---\n\n## Note ${idx + 1}/${targetNotes.length}: ${n.title}\n\n`;
+      notesMarkdownBody += `> **Metadata**: Domain: \`${n.domain}\` | Type: \`${n.type}\` | Tags: ${n.tags.map(t => `\`#${t}\``).join(', ')} | Path: \`${n.relPath}\`\n`;
+      notesMarkdownBody += `> **Direct Link**: ${noteDeepLink}\n\n`;
+      notesMarkdownBody += `${n.bodyContent.trim()}\n`;
+    });
+
+    const markdownPayload = `---
+title: "${titleStr} Knowledge Digest"
+topic: "${topicName}"
+type: "hub"
+total_notes: ${targetNotes.length}
+generated: "${new Date().toISOString()}"
+source_url: "${deepLink}"
+---
+
+# ${titleStr} — Knowledge Digest & Map of Content
+
+This document is a unified compilation of **${targetNotes.length} knowledge assets** from the **${topicName}** domain. It is structured for rapid ingestion into other LLM second brains, Obsidian, Logseq, or enterprise AI indexes.
+
+## Map of Content (MOC)
+
+${mocTable}
+
+## Knowledge Asset Payloads
+
+${notesMarkdownBody}
+`;
+
+    // 2. AI / LLM Topic Ingestion Prompt
+    const aiPromptPayload = `You are an AI Knowledge Base Librarian and Second Brain Assistant.
+Please ingest and scaffold the entire "${topicName}" domain (containing ${targetNotes.length} notes) into the target knowledge base.
+
+============================================================
+TOPIC INGESTION BUNDLE:
+- Domain/Topic: ${topicName}
+- Total Notes: ${targetNotes.length}
+- Source Web Link: ${deepLink}
+============================================================
+
+FULL TOPIC DIGEST WITH ALL NOTES:
+
+${markdownPayload}
+
+============================================================
+INGESTION INSTRUCTIONS:
+1. Create/update the domain folder for "${topicName}".
+2. Extract each individual note into its corresponding markdown file with full YAML frontmatter.
+3. Generate the domain "INDEX.md" Map of Content linking to each note.
+4. Verify all bi-directional [[wikilinks]] across the domain.
+============================================================`;
+
+    // 3. JSON Topic Digest
+    const jsonPayload = JSON.stringify({
+      schema: "https://schema.org/Collection",
+      ingestFormat: "KarpathyLLMWikiTopicDigest",
+      topic: topicName,
+      totalNotes: targetNotes.length,
+      generatedAt: new Date().toISOString(),
+      shareUrl: deepLink,
+      notes: targetNotes.map(n => ({
+        id: n.id,
+        title: n.title,
+        domain: n.domain,
+        topic: n.topic,
+        type: n.type,
+        status: n.status,
+        tags: n.tags,
+        summary: n.summary,
+        relPath: n.relPath,
+        shareUrl: `${baseUrl}?note=${encodeURIComponent(n.id)}`,
+        body: n.bodyContent
+      }))
+    }, null, 2);
+
+    return {
+      type: 'topic',
+      title: titleStr,
+      subtitle: `${targetNotes.length} Assets • ${topicName} Domain`,
+      filename,
+      deepLink,
+      markdown: markdownPayload,
+      prompt: aiPromptPayload,
+      json: jsonPayload
+    };
+  }
+
+  window.openCurrentTopicShare = function () {
+    window.openShareModal('topic', state.selectedTopic);
+  };
+
+  window.openShareModal = function (type, targetIdOrName) {
+    let payload = null;
+
+    if (type === 'note') {
+      const note = state.notes.find(n => n.id === targetIdOrName) || state.currentNote;
+      if (!note) return;
+      payload = generateNoteSharePayload(note);
+    } else {
+      const topic = targetIdOrName || state.selectedTopic || 'All';
+      payload = generateTopicSharePayload(topic);
+    }
+
+    state.shareData = payload;
+
+    if (el.shareModalTitle) el.shareModalTitle.textContent = `Share: ${payload.title}`;
+    if (el.shareModalSubtitle) el.shareModalSubtitle.textContent = payload.subtitle;
+    if (el.shareWebLinkInput) el.shareWebLinkInput.value = payload.deepLink;
+    if (el.shareMarkdownPreview) el.shareMarkdownPreview.value = payload.markdown;
+    if (el.sharePromptPreview) el.sharePromptPreview.value = payload.prompt;
+    if (el.shareJsonPreview) el.shareJsonPreview.value = payload.json;
+
+    // Default to 'link' tab
+    window.switchShareTab('link');
+
+    if (el.shareModal) {
+      el.shareModal.classList.add('active');
+    }
+  };
+
+  window.closeShareModal = function () {
+    if (el.shareModal) {
+      el.shareModal.classList.remove('active');
+    }
+  };
+
+  window.switchShareTab = function (tabName) {
+    state.activeShareTab = tabName;
+
+    // Update Tab Buttons
+    if (el.shareModal) {
+      el.shareModal.querySelectorAll('.subtab-btn').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.tab === tabName);
+      });
+
+      // Update Tab Panes
+      const tabPanes = {
+        'link': document.getElementById('shareTabContentLink'),
+        'markdown': document.getElementById('shareTabContentMarkdown'),
+        'prompt': document.getElementById('shareTabContentPrompt'),
+        'json': document.getElementById('shareTabContentJson')
+      };
+
+      Object.keys(tabPanes).forEach(k => {
+        if (tabPanes[k]) {
+          tabPanes[k].classList.toggle('active', k === tabName);
+        }
+      });
+    }
+  };
+
+  // Copy Web Link
+  window.copyShareWebLink = function () {
+    if (!state.shareData) return;
+    navigator.clipboard.writeText(state.shareData.deepLink).then(() => {
+      window.showToast('Shareable link copied to clipboard!');
+    }).catch(() => {
+      if (el.shareWebLinkInput) {
+        el.shareWebLinkInput.select();
+        document.execCommand('copy');
+        window.showToast('Shareable link copied to clipboard!');
+      }
+    });
+  };
+
+  // Test Open Link
+  window.testOpenShareLink = function () {
+    if (!state.shareData) return;
+    window.open(state.shareData.deepLink, '_blank');
+  };
+
+  // Copy Markdown
+  window.copyShareMarkdown = function () {
+    if (!state.shareData) return;
+    navigator.clipboard.writeText(state.shareData.markdown).then(() => {
+      window.showToast('Markdown ingestion bundle copied to clipboard!');
+    }).catch(() => {
+      if (el.shareMarkdownPreview) {
+        el.shareMarkdownPreview.select();
+        document.execCommand('copy');
+        window.showToast('Markdown ingestion bundle copied to clipboard!');
+      }
+    });
+  };
+
+  // Copy AI Prompt
+  window.copySharePrompt = function () {
+    if (!state.shareData) return;
+    navigator.clipboard.writeText(state.shareData.prompt).then(() => {
+      window.showToast('AI Ingestion Prompt copied to clipboard!');
+    }).catch(() => {
+      if (el.sharePromptPreview) {
+        el.sharePromptPreview.select();
+        document.execCommand('copy');
+        window.showToast('AI Ingestion Prompt copied to clipboard!');
+      }
+    });
+  };
+
+  // Copy JSON
+  window.copyShareJson = function () {
+    if (!state.shareData) return;
+    navigator.clipboard.writeText(state.shareData.json).then(() => {
+      window.showToast('JSON schema payload copied to clipboard!');
+    }).catch(() => {
+      if (el.shareJsonPreview) {
+        el.shareJsonPreview.select();
+        document.execCommand('copy');
+        window.showToast('JSON schema payload copied to clipboard!');
+      }
+    });
+  };
+
+  // Download Markdown File
+  window.downloadShareMarkdown = function () {
+    if (!state.shareData) return;
+    const blob = new Blob([state.shareData.markdown], { type: 'text/markdown;charset=utf-8' });
+    downloadBlob(blob, state.shareData.filename || 'knowledge-asset.md');
+    window.showToast(`Downloaded ${state.shareData.filename}`);
+  };
+
+  // Download JSON File
+  window.downloadShareJson = function () {
+    if (!state.shareData) return;
+    const jsonFilename = (state.shareData.filename || 'knowledge-asset').replace(/\.md$/, '') + '.json';
+    const blob = new Blob([state.shareData.json], { type: 'application/json;charset=utf-8' });
+    downloadBlob(blob, jsonFilename);
+    window.showToast(`Downloaded ${jsonFilename}`);
+  };
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  }
+
+  // Toast Notification Helper
+  let toastTimer = null;
+  window.showToast = function (message, duration) {
+    if (!el.toast) return;
+    el.toast.textContent = message;
+    el.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      el.toast.classList.remove('show');
+    }, duration || 2400);
+  };
+
+  // Markdown renderer
+  function renderMarkdown(md) {
+    if (!md) return '';
+    let html = escapeHtml(md);
+
+    // Code blocks
+    html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (m, lang, code) => `<pre><code>${code}</code></pre>`);
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Headers
+    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+    html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+    html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+    // Blockquotes
+    html = html.replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+    // Wikilinks
+    html = html.replace(/\[\[(.*?)\]\]/g, (match, p1) => {
+      const clean = p1.trim();
+      const target = state.notes.find(n => 
+        n.filename.replace(/\.md$/, '').toLowerCase() === clean.toLowerCase() ||
+        n.title.toLowerCase() === clean.toLowerCase()
+      );
+      if (target) {
+        return `<a class="wikilink-ref" href="javascript:void(0)" onclick="window.openNoteById('${target.id}')">[[${escapeHtml(clean)}]]</a>`;
+      }
+      return `<code>[[${escapeHtml(clean)}]]</code>`;
+    });
+
+    // Tables
+    const tableRegex = /((?:\|[^\n]+\|\r?\n)+)/g;
+    html = html.replace(tableRegex, match => {
+      const lines = match.trim().split('\n');
+      if (lines.length < 2) return match;
+      let tHtml = '<table>';
+      lines.forEach((line, idx) => {
+        if (line.includes('---')) return;
+        const cols = line.split('|').filter((c, i, arr) => i > 0 && i < arr.length - 1);
+        if (cols.length === 0) return;
+        if (idx === 0) {
+          tHtml += '<thead><tr>' + cols.map(c => `<th>${c.trim()}</th>`).join('') + '</tr></thead><tbody>';
+        } else {
+          tHtml += '<tr>' + cols.map(c => `<td>${c.trim()}</td>`).join('') + '</tr>';
+        }
+      });
+      tHtml += '</tbody></table>';
+      return tHtml;
+    });
+
+    html = html.replace(/^\s*-\s+(.*$)/gim, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+    html = html.replace(/\n\n/g, '</p><p>');
+
+    return `<p>${html}</p>`;
+  }
+
+  function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function highlightText(text, query) {
+    if (!query || !text) return escapeHtml(text);
+    const escapedText = escapeHtml(text);
+    const escapedQuery = escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escapedQuery})`, 'gi');
+    return escapedText.replace(regex, '<mark>$1</mark>');
+  }
+
+  function capitalize(str) {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  /* ==========================================================================
+     Knowledge Ingestion & PWA Controller Methods
+     ========================================================================== */
+
+  let cachedRawFiles = [];
+
+  window.toggleMobileSidebar = function () {
+    const sidebar = document.getElementById('facetsSidebar');
+    if (sidebar) {
+      sidebar.classList.toggle('mobile-open');
+    }
+  };
+
+  window.openIngestModal = function () {
+    const modal = document.getElementById('ingestModal');
+    if (modal) {
+      modal.classList.add('active');
+      window.updateDomainOptions('raw');
+      window.updateDomainOptions('manual');
+      window.refreshRawFiles();
+      window.updateManualPreview();
+    }
+  };
+
+  window.closeIngestModal = function () {
+    const modal = document.getElementById('ingestModal');
+    if (modal) {
+      modal.classList.remove('active');
+    }
+  };
+
+  window.switchIngestMode = function (mode) {
+    const tabRaw = document.getElementById('ingestTabRaw');
+    const tabManual = document.getElementById('ingestTabManual');
+    const paneRaw = document.getElementById('ingestModeRaw');
+    const paneManual = document.getElementById('ingestModeManual');
+
+    if (mode === 'raw') {
+      tabRaw.classList.add('active');
+      tabManual.classList.remove('active');
+      paneRaw.classList.add('active');
+      paneManual.classList.remove('active');
+    } else {
+      tabManual.classList.add('active');
+      tabRaw.classList.remove('active');
+      paneManual.classList.add('active');
+      paneRaw.classList.remove('active');
+      window.updateManualPreview();
+    }
+  };
+
+  window.updateDomainOptions = function (mode) {
+    const catSelect = document.getElementById(mode === 'raw' ? 'rawIngestCategory' : 'manualIngestCategory');
+    const domainSelect = document.getElementById(mode === 'raw' ? 'rawIngestDomain' : 'manualIngestDomain');
+    if (!catSelect || !domainSelect) return;
+
+    if (!catSelect.options.length) {
+      catSelect.innerHTML = categoryOptionsHtml(state.defaultCategory);
+    }
+
+    const cat = catSelect.value || state.defaultCategory;
+    domainSelect.innerHTML = domainsFor(cat)
+      .map(d => `<option value="${d.id}">${escapeHtml(d.name)} (${d.id})</option>`)
+      .join('');
+
+    if (mode === 'manual') {
+      window.updateManualPreview();
+    }
+  };
+
+  window.refreshRawFiles = function () {
+    const dropdown = document.getElementById('rawFileDropdown');
+    if (!dropdown) return;
+    dropdown.innerHTML = '<option value="">-- Fetching raw inbox files... --</option>';
+
+    fetch('./api/raw-files')
+      .then(res => {
+        if (!res.ok) throw new Error('API offline');
+        return res.json();
+      })
+      .then(data => {
+        cachedRawFiles = data.files || [];
+        if (cachedRawFiles.length === 0) {
+          dropdown.innerHTML = '<option value="">No raw files found in raw/ inbox</option>';
+          return;
+        }
+        dropdown.innerHTML = '<option value="">-- Select a file to ingest (' + cachedRawFiles.length + ' available) --</option>' +
+          cachedRawFiles.map(f => `<option value="${f.name}">${f.name} (${f.size_kb} KB - ${f.modified})</option>`).join('');
+      })
+      .catch(() => {
+        dropdown.innerHTML = '<option value="">⚠️ Backend API offline (Use Manual Capture)</option>';
+      });
+  };
+
+  window.onRawFileSelected = function (filename) {
+    const previewBox = document.getElementById('rawFilePreviewBox');
+    const previewMeta = document.getElementById('rawFileMetaText');
+    const previewArea = document.getElementById('rawFileContentPreview');
+    const titleInput = document.getElementById('rawIngestTitle');
+    const summaryInput = document.getElementById('rawIngestSummary');
+
+    if (!filename) {
+      if (previewBox) previewBox.classList.add('hidden');
+      return;
+    }
+
+    if (previewBox) previewBox.classList.remove('hidden');
+    if (previewMeta) previewMeta.textContent = `Loading ${filename}...`;
+
+    fetch(`./api/raw-file?name=${encodeURIComponent(filename)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.content) {
+          if (previewArea) previewArea.value = data.content;
+          if (previewMeta) previewMeta.textContent = `📄 ${filename} (${Math.round(data.content.length / 1024 * 10) / 10} KB)`;
+
+          // Auto-guess title
+          const cleanTitle = filename.replace(/^.*\//, '').replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ');
+          if (titleInput && !titleInput.value) {
+            titleInput.value = cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1);
+          }
+
+          // Auto-guess summary from first paragraphs
+          if (summaryInput && !summaryInput.value) {
+            const firstLines = data.content.split('\n').filter(l => l.trim() && !l.startsWith('#')).slice(0, 2).join(' ');
+            summaryInput.value = firstLines.slice(0, 160) + (firstLines.length > 160 ? '...' : '');
+          }
+        }
+      })
+      .catch(err => {
+        if (previewMeta) previewMeta.textContent = `❌ Could not read ${filename}`;
+      });
+  };
+
+  window.updateManualPreview = function () {
+    const title = (document.getElementById('manualIngestTitle')?.value || 'Untitled Note').trim();
+    const category = document.getElementById('manualIngestCategory')?.value || state.defaultCategory;
+    const domain = document.getElementById('manualIngestDomain')?.value || '';
+    const type = document.getElementById('manualIngestType')?.value || 'concept';
+    const tags = (document.getElementById('manualIngestTags')?.value || 'ai, second-brain').split(',').map(s => s.trim()).filter(Boolean);
+    const summary = (document.getElementById('manualIngestSummary')?.value || 'Dense summary of this note.').trim();
+    const previewEl = document.getElementById('manualFrontmatterPreview');
+
+    const today = new Date().toISOString().split('T')[0];
+    const fm = `---
+title: "${title}"
+domain: "${domain}"
+category: "${category}"
+type: "${type}"
+tags: ${JSON.stringify(tags)}
+created: ${today}
+updated: ${today}
+status: active
+summary: "${summary}"
+related:
+  - "[[INDEX]]"
+---`;
+
+    if (previewEl) {
+      previewEl.textContent = fm;
+    }
+  };
+
+  window.submitRawIngestion = function () {
+    const filename = document.getElementById('rawFileDropdown')?.value;
+    const category = document.getElementById('rawIngestCategory')?.value || state.defaultCategory;
+    const domain = document.getElementById('rawIngestDomain')?.value;
+    const title = document.getElementById('rawIngestTitle')?.value;
+    const type = document.getElementById('rawIngestType')?.value || 'concept';
+    const tags = (document.getElementById('rawIngestTags')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+    const summary = document.getElementById('rawIngestSummary')?.value;
+    const content = document.getElementById('rawFileContentPreview')?.value;
+    const archiveSource = document.getElementById('rawArchiveCheckbox')?.checked || false;
+    const btn = document.getElementById('btnSubmitRawIngest');
+
+    if (!title) {
+      showToast('⚠️ Please enter a Note Title before ingesting.', 3000);
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    showToast('⏳ Ingesting and compiling into Second Brain...', 2000);
+
+    fetch('./api/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        category,
+        domain,
+        type,
+        tags,
+        summary,
+        content,
+        source_file: filename,
+        archive_source: archiveSource
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (btn) btn.disabled = false;
+        if (data.success) {
+          showToast(`✅ Ingested: ${title}`, 3500);
+          window.closeIngestModal();
+          window.reloadKnowledgeData();
+        } else {
+          showToast(`❌ Error: ${data.error || 'Ingest failed'}`, 4000);
+        }
+      })
+      .catch(err => {
+        if (btn) btn.disabled = false;
+        showToast('❌ Server error during ingestion.', 4000);
+      });
+  };
+
+  window.submitManualIngestion = function () {
+    const category = document.getElementById('manualIngestCategory')?.value || state.defaultCategory;
+    const domain = document.getElementById('manualIngestDomain')?.value;
+    const title = document.getElementById('manualIngestTitle')?.value;
+    const type = document.getElementById('manualIngestType')?.value || 'concept';
+    const tags = (document.getElementById('manualIngestTags')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+    const summary = document.getElementById('manualIngestSummary')?.value;
+    const body = document.getElementById('manualIngestBody')?.value;
+    const btn = document.getElementById('btnSubmitManualIngest');
+
+    if (!title) {
+      showToast('⚠️ Please enter a Note Title.', 3000);
+      return;
+    }
+
+    if (btn) btn.disabled = true;
+    showToast('⏳ Saving note and updating index...', 2000);
+
+    fetch('./api/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        category,
+        domain,
+        type,
+        tags,
+        summary,
+        content: body
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (btn) btn.disabled = false;
+        if (data.success) {
+          showToast(`✅ Note saved: ${title}`, 3500);
+          window.closeIngestModal();
+          window.reloadKnowledgeData();
+        } else {
+          showToast(`❌ Error: ${data.error || 'Save failed'}`, 4000);
+        }
+      })
+      .catch(err => {
+        if (btn) btn.disabled = false;
+        showToast('❌ Server error during save.', 4000);
+      });
+  };
+
+  /* ==========================================================================
+     Google Authentication Controller
+     ========================================================================== */
+
+  function updateAuthUI(user) {
+    const signInBtn = document.getElementById('googleSignInBtn');
+    const profileChip = document.getElementById('userProfileChip');
+    const avatarImg = document.getElementById('userAvatarImg');
+    const displayName = document.getElementById('userDisplayName');
+    const menuName = document.getElementById('userMenuName');
+    const menuEmail = document.getElementById('userMenuEmail');
+
+    if (user) {
+      if (signInBtn) signInBtn.classList.add('hidden');
+      if (profileChip) profileChip.classList.remove('hidden');
+      if (avatarImg) {
+        avatarImg.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'User')}&background=8b5cf6&color=fff`;
+      }
+      const name = user.displayName || user.email?.split('@')[0] || 'User';
+      if (displayName) displayName.textContent = name;
+      if (menuName) menuName.textContent = user.displayName || name;
+      if (menuEmail) menuEmail.textContent = user.email || '';
+    } else {
+      if (signInBtn) signInBtn.classList.remove('hidden');
+      if (profileChip) profileChip.classList.add('hidden');
+      const menuDropdown = document.getElementById('userMenuDropdown');
+      if (menuDropdown) menuDropdown.classList.add('hidden');
+    }
+  }
+
+  window.handleGoogleLogin = async function () {
+    if (window.KBAuth) {
+      try {
+        showToast('🔑 Signing in with Google...', 2500);
+        await window.KBAuth.loginWithGoogle();
+      } catch (err) {
+        console.error('Login error:', err);
+      }
+    }
+  };
+
+  window.handleGoogleLogout = async function () {
+    if (window.KBAuth) {
+      try {
+        await window.KBAuth.logout();
+        showToast('Signed out successfully.', 2500);
+      } catch (err) {
+        console.error('Logout error:', err);
+      }
+    }
+  };
+
+  window.toggleUserMenu = function (e) {
+    if (e) e.stopPropagation();
+    const dropdown = document.getElementById('userMenuDropdown');
+    if (dropdown) dropdown.classList.toggle('hidden');
+  };
+
+  window.addEventListener('click', () => {
+    const dropdown = document.getElementById('userMenuDropdown');
+    if (dropdown && !dropdown.classList.contains('hidden')) {
+      dropdown.classList.add('hidden');
+    }
+  });
+
+  window.addEventListener('kb:auth_changed', (e) => {
+    updateAuthUI(e.detail ? e.detail.user : null);
+  });
+
+  /* ==========================================================================
+     Google Drive & Ingestion Sync Controller
+     ========================================================================== */
+
+  window.triggerGoogleDriveSync = async function () {
+    const btn = document.getElementById('syncDriveBtn');
+    const txt = document.getElementById('syncBtnText');
+    if (btn) btn.classList.add('syncing');
+    if (txt) txt.textContent = 'Syncing...';
+    showToast('🔄 Syncing Google Drive inbox & mirroring NotebookLM...', 3000);
+
+    try {
+      const res = await fetch('./api/sync', { method: 'POST' });
+      const data = await res.json();
+      
+      setTimeout(async () => {
+        try {
+          const notesRes = await fetch('./api/notes');
+          if (notesRes.ok) {
+            window.KB_DATA = await notesRes.json();
+            loadData();
+          }
+        } catch (e) {}
+
+        if (btn) btn.classList.remove('syncing');
+        if (txt) txt.textContent = 'Sync';
+        showToast('✅ Google Drive & Notebooks sync completed!', 3500);
+      }, 3000);
+    } catch (err) {
+      if (btn) btn.classList.remove('syncing');
+      if (txt) txt.textContent = 'Sync';
+      showToast('⚠️ Sync request sent to background.', 3000);
+    }
+  };
+
+  /* ==========================================================================
+     Progressive Web App (PWA) Install Controller
+     ========================================================================== */
+
+  let deferredInstallPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    const installBtn = document.getElementById('pwaInstallBtn');
+    if (installBtn) {
+      installBtn.classList.remove('hidden');
+    }
+  });
+
+  window.installPWA = async function () {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      console.log('[PWA] User choice:', outcome);
+      deferredInstallPrompt = null;
+      const installBtn = document.getElementById('pwaInstallBtn');
+      if (installBtn) installBtn.classList.add('hidden');
+    } else {
+      showToast('📱 To install: tap Share or Menu in your browser and select "Add to Home Screen".', 4000);
+    }
+  };
+
+  window.addEventListener('appinstalled', () => {
+    console.log('[PWA] Knowledge Base app installed successfully.');
+    const installBtn = document.getElementById('pwaInstallBtn');
+    if (installBtn) installBtn.classList.add('hidden');
+    showToast('🎉 Knowledge Base installed as app!', 3500);
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    init();
+    if (window.KBAuth) {
+      const user = window.KBAuth.getCurrentUser();
+      updateAuthUI(user);
+    }
+  });
+
+})();
+
+

@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Knowledge Base | Modern Second Brain & LLM Wiki</title>
+  
+  <!-- PWA Manifest & Icons -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="theme-color" content="#07080c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="KnowledgeBase">
+
+  <!-- Inter Font Family -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <script>
+    // Ensure /kb has trailing slash so relative paths resolve correctly
+    if (window.location.pathname === '/kb') {
+      window.location.replace('/kb/' + window.location.search + window.location.hash);
+    }
+  </script>
+
+  <link rel="stylesheet" href="styles.css?v=8">
+</head>
+
+<body>
+
+  <div class="app-layout">
+    
+    <!-- Left Navigation Sidebar -->
+    <aside class="app-sidebar" id="facetsSidebar">
+      
+      <!-- Brand Logo Section -->
+      <div class="sidebar-brand" onclick="window.location.href='./'" title="Reload Dashboard">
+        <div class="brand-icon-box">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a8 8 0 0 0-8 8c0 3.3 2 6.2 5 7.4V20a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2.6c3-1.2 5-4.1 5-7.4a8 8 0 0 0-8-8z"></path>
+            <line x1="9.5" y1="9" x2="9.51" y2="9"></line>
+            <line x1="14.5" y1="9" x2="14.51" y2="9"></line>
+            <path d="M9.5 13a3.5 3.5 0 0 0 5 0"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">KnowledgeBase</div>
+          <div class="brand-subtitle">Second Brain Wiki</div>
+        </div>
+        <button class="mobile-close-sidebar-btn" onclick="window.toggleMobileSidebar()">✕</button>
+      </div>
+
+      <!-- Sidebar Navigation Groups -->
+      <div class="sidebar-scrollable">
+        
+        <!-- Category Section -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Knowledge Categories</div>
+          <!-- Populated from KB_DATA.categories -->
+          <div class="category-nav-list" id="categoryBar"></div>
+        </div>
+
+        <!-- Topic Domains Section -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-header">
+            <span class="sidebar-section-title">Topic Domains</span>
+            <span class="sidebar-section-badge" id="topicTotalCount">—</span>
+          </div>
+          <div class="topic-nav-list" id="topicFacetList">
+            <!-- Dynamically populated with rich topic items -->
+          </div>
+        </div>
+
+        <!-- Content Types Refiner -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Content Types</div>
+          <div class="facet-list" id="typeFacetList">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Tags Refiner -->
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Popular Tags</div>
+          <div class="tags-cloud" id="tagFacetList">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Sidebar Footer Status -->
+      <div class="sidebar-footer">
+        <div class="footer-system-status">
+          <span class="status-indicator-dot"></span>
+          <div class="status-text">
+            <div class="status-title">System Live</div>
+            <div class="status-subtitle">Port 7650 • Tailgate /kb</div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="app-main">
+      
+      <!-- Top Navigation & Action Header -->
+      <header class="app-topbar">
+        
+        <!-- Left: Mobile Menu & Breadcrumb -->
+        <div class="topbar-left">
+          <button class="mobile-menu-trigger" onclick="window.toggleMobileSidebar()" title="Toggle Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div class="topbar-breadcrumb">
+            <span class="crumb-root">Second Brain</span>
+            <span class="crumb-separator">/</span>
+            <span class="crumb-active" id="activeBreadcrumb">All Knowledge</span>
+          </div>
+        </div>
+
+        <!-- Center: Modern Search Bar -->
+        <div class="topbar-center">
+          <div class="modern-search-container">
+            <div class="search-scope-wrapper">
+              <select id="topicScopeSelect" class="search-scope-select" onchange="window.selectTopic(this.value)">
+                <option value="All">All Domains</option>
+              </select>
+            </div>
+            <div class="search-divider"></div>
+            <div class="search-icon-box">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </div>
+            <input type="text" id="searchInput" class="modern-search-input" placeholder="Search the knowledge base..." autocomplete="off" />
+            <span id="searchClear" class="search-clear-btn hidden" title="Clear search">✕</span>
+            <div class="search-badge-kbd">/</div>
+          </div>
+        </div>
+
+        <!-- Right: Actions, Sync, Install, Auth & Ingest -->
+        <div class="topbar-right">
+          
+          <!-- Sync Google Drive Button -->
+          <button id="syncDriveBtn" class="btn-action btn-sync" onclick="window.triggerGoogleDriveSync()" title="Sync Google Drive & SecondBrain Inbox">
+            <svg id="syncIconSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span id="syncBtnText">Sync</span>
+          </button>
+
+          <!-- Install PWA Button (Hidden by default, shown when installable) -->
+          <button id="pwaInstallBtn" class="btn-action btn-install hidden" onclick="window.installPWA()" title="Install Knowledge Base Web App">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+            <span>Install</span>
+          </button>
+
+          <!-- Ingest Button -->
+          <button id="openIngestBtn" class="btn-action btn-ingest" onclick="window.openIngestModal()" title="Ingest raw data or quick capture note">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M12 5v14M5 12h14"></path>
+            </svg>
+            <span>Ingest</span>
+          </button>
+
+          <!-- Google Sign-In & User Profile -->
+          <div id="userAuthContainer" class="user-auth-container">
+            <button id="googleSignInBtn" class="btn-action btn-google-login" onclick="window.handleGoogleLogin()" title="Sign in with Google">
+              <svg width="14" height="14" viewBox="0 0 24 24">
+                <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.3 9 5 12 5z"/>
+                <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/>
+                <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15.2s.7 5.5 1.9 7.9l3.7-2.9z"/>
+                <path fill="#34A853" d="M12 23.5c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16.5C3.7 20.2 7.5 23.5 12 23.5z"/>
+              </svg>
+              <span>Sign In</span>
+            </button>
+            <div id="userProfileChip" class="user-profile-chip hidden" onclick="window.toggleUserMenu(event)" title="User Profile">
+              <img id="userAvatarImg" class="user-avatar" src="" alt="Avatar" />
+              <span id="userDisplayName" class="user-name">User</span>
+              <div id="userMenuDropdown" class="user-menu-dropdown hidden">
+                <div class="user-menu-header">
+                  <div id="userMenuName" class="user-menu-name"></div>
+                  <div id="userMenuEmail" class="user-menu-email"></div>
+                </div>
+                <div class="user-menu-divider"></div>
+                <button class="user-menu-item" onclick="window.handleGoogleLogout()">
+                  🚪 Sign Out
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Theme Toggle -->
+          <button id="themeToggleBtn" class="btn-action btn-theme" onclick="window.toggleTheme()" title="Toggle Dark/Light Mode">
+            <span id="themeIcon">🌙</span>
+          </button>
+
+          <!-- Zima Status Chip -->
+          <div class="topbar-chip" title="Live Synced Second Brain">
+            <span class="chip-dot"></span>
+            <span id="totalNotesStat">—</span> Assets
+          </div>
+
+        </div>
+
+      </header>
+
+      <!-- Main Body Container -->
+      <main class="app-body">
+        
+        <!-- Hero Metrics Strip — total card + one card per category, from KB_DATA.categories -->
+        <section class="metrics-grid" id="metricsGrid"></section>
+
+        <!-- Topic Pills & View Controls Navigation Strip -->
+        <section class="controls-ribbon">
+          
+          <!-- Topic Pills Scroller -->
+          <div class="topic-pills-scroller" id="topicTabs">
+            <!-- Dynamically populated from active category topics -->
+          </div>
+
+          <!-- View Switchers -->
+          <div class="view-switchers-group">
+            <button id="toggleLayoutBtn" class="btn-view active" onclick="window.toggleCardListView()" title="Switch between Card and List view">
+              <span id="layoutToggleIcon" class="btn-icon-slot">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="14" width="7" height="7"></rect>
+                  <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+              </span>
+              <span id="layoutToggleLabel">Cards</span>
+            </button>
+
+            <button id="viewGraphBtn" class="btn-view" onclick="window.toggleGraphView()" title="Explore Knowledge Graph">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+              </svg>
+              <span>Graph</span>
+            </button>
+          </div>
+
+        </section>
+
+        <!-- Results Info & Active Filters -->
+        <section class="results-header-bar">
+          <div class="results-meta-left" id="resultsCount">
+          </div>
+          <div class="results-actions-right">
+            <button id="shareTopicBtn" class="btn-topic-share" onclick="window.openCurrentTopicShare()" title="Share / Ingest Active Topic">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="18" cy="5" r="3"></circle>
+                <circle cx="6" cy="12" r="3"></circle>
+                <circle cx="18" cy="19" r="3"></circle>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+              </svg>
+              <span id="shareTopicBtnLabel">Share Topic</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- Active Filter Badges -->
+        <div class="active-filter-chips-row" id="activeFilters"></div>
+
+        <!-- 1. Cards View (Default Modern Nixtio Grid) -->
+        <div id="cardsView" class="modern-cards-grid"></div>
+
+        <!-- 2. List / Table View -->
+        <div id="listView" class="modern-table-container hidden"></div>
+
+        <!-- 3. Knowledge Graph Canvas -->
+        <div id="graphView" class="modern-graph-container hidden">
+          <canvas id="graphCanvas" class="modern-graph-canvas"></canvas>
+          
+          <!-- Graph Controls -->
+          <div class="graph-floating-toolbar">
+            <button id="graphZoomIn" class="btn-graph-tool" title="Zoom In">+</button>
+            <button id="graphZoomOut" class="btn-graph-tool" title="Zoom Out">−</button>
+            <button id="graphCenter" class="btn-graph-tool" title="Center View">⛶</button>
+            <button id="graphPhysics" class="btn-graph-tool" title="Toggle Physics">⚡</button>
+          </div>
+
+          <div class="graph-legend-box" id="graphLegend"></div>
+          <div id="graphDetailsCard" class="graph-detail-popup"></div>
+        </div>
+
+      </main>
+
+    </div>
+
+  </div>
+
+  <!-- Note Reader Modal (SmartPreview Drawer) -->
+  <div id="noteModal" class="modal-backdrop">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-header-titles">
+          <div class="modal-path-badge" id="modalPath">knowledge/note.md</div>
+          <h2 class="modal-title" id="modalTitle">Note Title</h2>
+        </div>
+        <div class="modal-header-actions">
+          <button id="modalShareBtn" class="btn-modal-action" title="Share & Ingest this note">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
+            <span>Share</span>
+          </button>
+          <button id="modalClose" class="btn-modal-close" title="Close (Esc)">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-meta-strip" id="modalMeta"></div>
+      <div class="modal-tag-editor-strip" id="modalTagEditor"></div>
+
+      <div class="modal-scrollable-body" id="modalBody"></div>
+
+      <div class="modal-footer">
+        <div id="modalRelated" class="modal-related-tags"></div>
+        <div class="modal-footer-btns">
+          <button id="copyPathBtn" class="btn-modal-secondary">Copy Path</button>
+          <button id="modalShareFooterBtn" class="btn-modal-primary">Share & Ingest</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Universal Share Modal -->
+  <div id="shareModal" class="modal-backdrop">
+    <div class="modal-window modal-window-share">
+      <div class="modal-header">
+        <div class="modal-header-titles">
+          <div class="modal-path-badge" id="shareModalSubtitle">Share Knowledge Asset</div>
+          <h2 class="modal-title" id="shareModalTitle">Share & Ingest</h2>
+        </div>
+        <button id="shareModalClose" class="btn-modal-close" title="Close (Esc)" onclick="window.closeShareModal()">✕</button>
+      </div>
+
+      <!-- Share Tabs -->
+      <div class="modal-subtabs">
+        <button class="subtab-btn active" data-tab="link" onclick="window.switchShareTab('link')">Shareable Link</button>
+        <button class="subtab-btn" data-tab="markdown" onclick="window.switchShareTab('markdown')">Markdown Ingest</button>
+        <button class="subtab-btn" data-tab="prompt" onclick="window.switchShareTab('prompt')">AI Prompt</button>
+        <button class="subtab-btn" data-tab="json" onclick="window.switchShareTab('json')">JSON Schema</button>
+      </div>
+
+      <div class="modal-scrollable-body">
+        <div id="shareTabContentLink" class="share-tab-pane active">
+          <p class="share-info-text">Direct deep link to this knowledge asset. Opening this URL in any browser instantly opens the note or filters to this topic.</p>
+          <div class="share-input-row">
+            <input type="text" id="shareWebLinkInput" class="modern-input" readonly />
+            <button class="btn-action btn-primary" onclick="window.copyShareWebLink()">Copy Link</button>
+            <button class="btn-action btn-secondary" onclick="window.testOpenShareLink()">Open ↗</button>
+          </div>
+        </div>
+
+        <div id="shareTabContentMarkdown" class="share-tab-pane">
+          <p class="share-info-text">Complete Markdown payload with Karpathy-compliant YAML frontmatter, taxonomy metadata, and interconnected [[wikilinks]].</p>
+          <textarea id="shareMarkdownPreview" class="modern-textarea code-font" readonly spellcheck="false"></textarea>
+          <div class="share-btn-row">
+            <button class="btn-action btn-primary" onclick="window.copyShareMarkdown()">Copy Markdown</button>
+            <button class="btn-action btn-secondary" onclick="window.downloadShareMarkdown()">Download .md</button>
+          </div>
+        </div>
+
+        <div id="shareTabContentPrompt" class="share-tab-pane">
+          <p class="share-info-text">Pre-engineered AI ingestion prompt. Copy and paste directly into an AI session (Claude, Cursor, ChatGPT) to instruct the LLM to file and synthesize this note.</p>
+          <textarea id="sharePromptPreview" class="modern-textarea code-font" readonly spellcheck="false"></textarea>
+          <div class="share-btn-row">
+            <button class="btn-action btn-primary" onclick="window.copySharePrompt()">Copy AI Prompt</button>
+          </div>
+        </div>
+
+        <div id="shareTabContentJson" class="share-tab-pane">
+          <p class="share-info-text">Machine-readable JSON schema for automated ETL, vector embeddings, or RAG ingestion pipelines.</p>
+          <textarea id="shareJsonPreview" class="modern-textarea code-font" readonly spellcheck="false"></textarea>
+          <div class="share-btn-row">
+            <button class="btn-action btn-primary" onclick="window.copyShareJson()">Copy JSON</button>
+            <button class="btn-action btn-secondary" onclick="window.downloadShareJson()">Download .json</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dedicated Data Ingestion Modal -->
+  <div id="ingestModal" class="modal-backdrop">
+    <div class="modal-window modal-window-ingest">
+      <div class="modal-header">
+        <div class="modal-header-titles">
+          <div class="modal-path-badge">Intake & Synthesis Engine</div>
+          <h2 class="modal-title">📥 Ingest Knowledge Asset</h2>
+        </div>
+        <button id="ingestModalClose" class="btn-modal-close" title="Close (Esc)" onclick="window.closeIngestModal()">✕</button>
+      </div>
+
+      <!-- Ingest Tabs -->
+      <div class="modal-subtabs">
+        <button class="subtab-btn active" id="ingestTabRaw" onclick="window.switchIngestMode('raw')">Select from Raw Inbox (raw/)</button>
+        <button class="subtab-btn" id="ingestTabManual" onclick="window.switchIngestMode('manual')">Quick Capture / New Note</button>
+      </div>
+
+      <div class="modal-scrollable-body">
+        
+        <!-- Mode 1: Raw File Selector -->
+        <div id="ingestModeRaw" class="ingest-tab-pane active">
+          <div class="form-group">
+            <label class="form-label" for="rawFileDropdown">Source Raw File in <code>raw/</code>:</label>
+            <select id="rawFileDropdown" class="modern-select" onchange="window.onRawFileSelected(this.value)">
+              <option value="">-- Loading raw inbox files... --</option>
+            </select>
+          </div>
+
+          <div id="rawFilePreviewBox" class="raw-preview-container hidden">
+            <div class="raw-preview-top">
+              <span id="rawFileMetaText">File info</span>
+              <button class="btn-sm" onclick="window.refreshRawFiles()">🔄 Refresh Inbox</button>
+            </div>
+            <textarea id="rawFileContentPreview" class="raw-preview-textarea code-font" readonly></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group form-group-narrow">
+              <label class="form-label">Category:</label>
+              <select id="rawIngestCategory" class="modern-select" onchange="window.updateDomainOptions('raw')"></select>
+            </div>
+            <div class="form-group form-group-wide">
+              <label class="form-label">Domain:</label>
+              <select id="rawIngestDomain" class="modern-select"></select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Note Title:</label>
+            <input type="text" id="rawIngestTitle" class="modern-input" placeholder="e.g. Claude Code Token Optimization" />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group form-group-narrow">
+              <label class="form-label">Content Type:</label>
+              <select id="rawIngestType" class="modern-select">
+                <option value="concept">Concept</option>
+                <option value="guide">Guide</option>
+                <option value="spec">Technical Spec</option>
+                <option value="reference">Reference</option>
+                <option value="decision">ADR Decision</option>
+                <option value="retrospective">Retrospective</option>
+              </select>
+            </div>
+            <div class="form-group form-group-wide">
+              <label class="form-label">Tags (comma-separated):</label>
+              <input type="text" id="rawIngestTags" class="modern-input" placeholder="ai, prompt-eng, tokens" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">1-2 Sentence Summary:</label>
+            <textarea id="rawIngestSummary" class="modern-textarea" rows="2" placeholder="Dense atomic summary for LLM context injection..."></textarea>
+          </div>
+
+          <div class="form-checkbox-row">
+            <label>
+              <input type="checkbox" id="rawArchiveCheckbox" checked />
+              Archive raw file after successful ingestion
+            </label>
+          </div>
+
+          <div class="form-submit-row">
+            <button id="btnSubmitRawIngest" class="btn-action btn-primary btn-lg" onclick="window.submitRawIngestion()">
+              ⚡ Ingest & Synthesize Note
+            </button>
+          </div>
+        </div>
+
+        <!-- Mode 2: Manual Capture -->
+        <div id="ingestModeManual" class="ingest-tab-pane">
+          <div class="form-row">
+            <div class="form-group form-group-narrow">
+              <label class="form-label">Category:</label>
+              <select id="manualIngestCategory" class="modern-select" onchange="window.updateDomainOptions('manual')"></select>
+            </div>
+            <div class="form-group form-group-wide">
+              <label class="form-label">Domain:</label>
+              <select id="manualIngestDomain" class="modern-select"></select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Note Title:</label>
+            <input type="text" id="manualIngestTitle" class="modern-input" placeholder="e.g. Vector Embedding Indexing Pipelines" oninput="window.updateManualPreview()" />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group form-group-narrow">
+              <label class="form-label">Content Type:</label>
+              <select id="manualIngestType" class="modern-select" onchange="window.updateManualPreview()">
+                <option value="concept">Concept</option>
+                <option value="guide">Guide</option>
+                <option value="spec">Technical Spec</option>
+                <option value="reference">Reference</option>
+                <option value="decision">ADR Decision</option>
+                <option value="retrospective">Retrospective</option>
+              </select>
+            </div>
+            <div class="form-group form-group-wide">
+              <label class="form-label">Tags (comma-separated):</label>
+              <input type="text" id="manualIngestTags" class="modern-input" placeholder="rag, vectors, embeddings, llm" oninput="window.updateManualPreview()" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Summary:</label>
+            <textarea id="manualIngestSummary" class="modern-textarea" rows="2" placeholder="Dense atomic summary..." oninput="window.updateManualPreview()"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Markdown Body:</label>
+            <textarea id="manualIngestBody" class="modern-textarea code-font" rows="7" placeholder="## Key Findings&#10;Write markdown content here..." oninput="window.updateManualPreview()"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Live Frontmatter Preview:</label>
+            <pre id="manualFrontmatterPreview" class="preview-code-block">---&#10;title: "..."&#10;---</pre>
+          </div>
+
+          <div class="form-submit-row">
+            <button id="btnSubmitManualIngest" class="btn-action btn-primary btn-lg" onclick="window.submitManualIngestion()">
+              💾 Save & Index Note
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Feedback -->
+  <div id="shToast" class="modern-toast"></div>
+
+  <!-- Service Worker Registration for PWA with Auto-Update -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => {
+            console.log('[PWA] Service Worker registered, scope:', reg.scope);
+            reg.update();
+          })
+          .catch((err) => {
+            console.warn('[PWA] Service Worker registration failed:', err);
+          });
+      });
+    }
+  </script>
+
+  <!-- Firebase Compatibility SDK for Google Sign-In -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="firebaseConfig.js?v=9"></script>
+
+  <!-- Offline Knowledge Payload & Fast Graph/App Controller -->
+  <script src="data.js?v=9"></script>
+  <script src="graph.js?v=9"></script>
+  <script src="app.js?v=9"></script>
+</body>
+
+</html>

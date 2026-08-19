@@ -1,0 +1,37 @@
+{
+  "id": "com.smarthub.knowledgebase.dashboard",
+  "name": "Knowledge Base | SmartHub Second Brain",
+  "short_name": "KnowledgeBase",
+  "description": "Unified Karpathy LLM Wiki, Interactive Knowledge Graph & Second Brain Dashboard",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07080c",
+  "theme_color": "#07080c",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": [
+    "productivity",
+    "education",
+    "developer-tools"
+  ]
+}
