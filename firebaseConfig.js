@@ -35,11 +35,9 @@
     // Dynamic sync from ProjectsProxi server
     if (typeof fetch !== 'undefined') {
         const proxyEndpoints = [
+            './api/config/auth',
+            './api/config/kb',
             'http://127.0.0.1:8765/api/config/kb',
-            'http://127.0.0.1:8765/api/config/knowledgebase',
-            'http://127.0.0.1:8765/api/config/blanket',
-            '/api/config/auth',
-            '/api/config/kb',
             'https://themeanmachine.taild1868e.ts.net:10006/api/config/blanket'
         ];
         for (const ep of proxyEndpoints) {

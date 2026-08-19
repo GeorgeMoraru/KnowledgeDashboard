@@ -23,9 +23,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <script>
-    // Ensure /kb has trailing slash so relative paths resolve correctly
-    if (window.location.pathname === '/kb') {
-      window.location.replace('/kb/' + window.location.search + window.location.hash);
+    // Ensure directory paths without trailing slashes get trailing slashes for clean relative asset loading on GitHub Pages & Tailscale
+    if (!window.location.pathname.endsWith('/') && !window.location.pathname.endsWith('.html') && !window.location.pathname.includes('.')) {
+      window.location.replace(window.location.pathname + '/' + window.location.search + window.location.hash);
     }
   </script>
 
