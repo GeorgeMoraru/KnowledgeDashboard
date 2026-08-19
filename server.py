@@ -594,9 +594,19 @@ class KBServerHandler(BaseHTTPRequestHandler):
             })
             return
 
-        # API: Auth Configuration
+        # API: Auth Configuration (dynamically retrieved from ProjectsProxi)
         if path in ["/api/config/auth", "/api/config/kb", "/api/config"]:
-            self.send_json(200, AUTH_CONFIG)
+            cfg = dict(AUTH_CONFIG)
+            try:
+                req = urllib.request.Request("http://127.0.0.1:8765/api/config/kb", headers={"User-Agent": "KB-Dashboard/1.0"})
+                with urllib.request.urlopen(req, timeout=1.5) as resp:
+                    if resp.status == 200:
+                        remote_cfg = json.loads(resp.read().decode("utf-8"))
+                        if remote_cfg and remote_cfg.get("apiKey"):
+                            cfg = remote_cfg
+            except Exception:
+                pass
+            self.send_json(200, cfg)
             return
 
         # API: Activity / Ingestion Notifications

@@ -2436,6 +2436,44 @@ mark {
   }
 }
 
+@media (max-width: 540px) {
+  .topbar-right {
+    gap: 5px;
+  }
+
+  .btn-sync span,
+  .btn-install span,
+  .btn-ingest span {
+    display: none;
+  }
+
+  .btn-sync,
+  .btn-install,
+  .btn-ingest {
+    padding: 6px 9px;
+  }
+
+  .guest-mode-pill span {
+    font-size: 10.5px;
+  }
+
+  .notif-dropdown {
+    right: -70px;
+    width: 320px;
+    max-width: calc(100vw - 20px);
+  }
+
+  .modal-window {
+    width: 100% !important;
+    max-height: 96vh;
+    border-radius: var(--radius-md);
+  }
+
+  .modal-backdrop {
+    padding: 6px;
+  }
+}
+
 @media (max-width: 420px) {
   .metrics-grid{
     grid-template-columns: 1fr;
@@ -2447,6 +2485,23 @@ mark {
 
   .brand-subtitle{
     display: none;
+  }
+
+  .guest-mode-pill {
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+
+  .user-name {
+    display: none;
+  }
+
+  .user-profile-chip {
+    padding: 2px;
+  }
+
+  .notif-dropdown {
+    right: -110px;
   }
 }
 
