@@ -243,8 +243,19 @@
 
   let deepLinkApplied = false;
 
-  function loadData() {
-    if (!window.KB_DATA) return;
+  async function loadData() {
+    if (!window.KB_DATA) {
+      try {
+        const res = await fetch('./api/notes');
+        if (res.ok) {
+          window.KB_DATA = await res.json();
+        }
+      } catch (e) {}
+    }
+    if (!window.KB_DATA) {
+      console.warn('[KB] No Knowledge Base data available.');
+      return;
+    }
 
     state.notes = (window.KB_DATA.notes || []).map(n => ({
       ...n,
@@ -2879,7 +2890,7 @@ related:
     showToast('🎉 Knowledge Base installed as app!', 3500);
   });
 
-  document.addEventListener('DOMContentLoaded', () => {
+  const bootstrap = () => {
     init();
     attachMaterialRipples();
     fetchNotifications();
@@ -2887,7 +2898,13 @@ related:
       const user = window.KBAuth.getCurrentUser();
       updateAuthUI(user);
     }
-  });
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootstrap);
+  } else {
+    bootstrap();
+  }
 
 })();
 
