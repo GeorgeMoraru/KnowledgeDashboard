@@ -685,12 +685,12 @@ class KBServerHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_HEAD(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_cors_headers()
-        self.end_headers()
+        self.handle_get(send_body=False)
 
     def do_GET(self):
+        self.handle_get(send_body=True)
+
+    def handle_get(self, send_body=True):
         parsed_url = urlparse(self.path)
         path = strip_proxy_prefix(parsed_url.path)
 
@@ -706,7 +706,7 @@ class KBServerHandler(BaseHTTPRequestHandler):
                 "proxy_prefix": PROXY_PREFIX,
                 "last_sync": SYNC_STATE["last_sync_time"],
                 "is_syncing": SYNC_STATE["is_syncing"]
-            })
+            }, send_body=send_body)
             return
 
         # API: Auth Configuration (dynamically retrieved from ProjectsProxi)
@@ -767,7 +767,7 @@ class KBServerHandler(BaseHTTPRequestHandler):
                                 "modified": mtime
                             })
             raw_files.sort(key=lambda x: x["modified"], reverse=True)
-            self.send_json(200, {"files": raw_files, "total": len(raw_files)})
+            self.send_json(200, {"files": raw_files, "total": len(raw_files)}, send_body=send_body)
             return
 
         # API: Read specific raw file content
@@ -775,15 +775,15 @@ class KBServerHandler(BaseHTTPRequestHandler):
             params = parse_qs(parsed_url.query)
             target = safe_join(RAW_DIR, unquote(params.get("name", [""])[0]))
             if not target or not os.path.isfile(target):
-                self.send_json(404, {"error": "File not found"})
+                self.send_json(404, {"error": "File not found"}, send_body=send_body)
                 return
 
             try:
                 with open(target, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
-                self.send_json(200, {"filename": os.path.relpath(target, RAW_DIR).replace("\\", "/"), "content": content})
+                self.send_json(200, {"filename": os.path.relpath(target, RAW_DIR).replace("\\", "/"), "content": content}, send_body=send_body)
             except Exception as e:
-                self.send_json(500, {"error": str(e)})
+                self.send_json(500, {"error": str(e)}, send_body=send_body)
             return
 
         # API: Note Git History
@@ -792,7 +792,7 @@ class KBServerHandler(BaseHTTPRequestHandler):
             rel_path = unquote(params.get("relPath", params.get("path", [""]))[0])
             target = safe_join(KB_ROOT_DIR, rel_path)
             if not target or not os.path.isfile(target):
-                self.send_json(404, {"error": "Note not found"})
+                self.send_json(404, {"error": "Note not found"}, send_body=send_body)
                 return
 
             try:
@@ -810,9 +810,9 @@ class KBServerHandler(BaseHTTPRequestHandler):
                                 "date": parts[2],
                                 "message": parts[3]
                             })
-                self.send_json(200, {"commits": commits, "relPath": rel_path})
+                self.send_json(200, {"commits": commits, "relPath": rel_path}, send_body=send_body)
             except Exception as e:
-                self.send_json(500, {"error": str(e)})
+                self.send_json(500, {"error": str(e)}, send_body=send_body)
             return
 
         # API: Note Git Diff / Show revision
@@ -822,7 +822,7 @@ class KBServerHandler(BaseHTTPRequestHandler):
             commit_hash = unquote(params.get("commit", [""])[0]).strip()
             target = safe_join(KB_ROOT_DIR, rel_path)
             if not target or not os.path.isfile(target):
-                self.send_json(404, {"error": "Note not found"})
+                self.send_json(404, {"error": "Note not found"}, send_body=send_body)
                 return
 
             try:
@@ -836,9 +836,9 @@ class KBServerHandler(BaseHTTPRequestHandler):
                     "content": res.stdout,
                     "commit": commit_hash,
                     "relPath": rel_path
-                })
+                }, send_body=send_body)
             except Exception as e:
-                self.send_json(500, {"error": str(e)})
+                self.send_json(500, {"error": str(e)}, send_body=send_body)
             return
 
         # Serve static files from dashboard directory
@@ -867,8 +867,9 @@ class KBServerHandler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-cache, must-revalidate")
             self.send_cors_headers()
             self.end_headers()
-            with open(target_file, "rb") as f:
-                self.wfile.write(f.read())
+            if send_body:
+                with open(target_file, "rb") as f:
+                    self.wfile.write(f.read())
             return
 
         # Fallback to index.html for SPA routing
@@ -878,14 +879,16 @@ class KBServerHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_cors_headers()
             self.end_headers()
-            with open(index_file, "rb") as f:
-                self.wfile.write(f.read())
+            if send_body:
+                with open(index_file, "rb") as f:
+                    self.wfile.write(f.read())
             return
 
         self.send_response(404)
         self.send_header("Content-Type", "text/plain")
         self.end_headers()
-        self.wfile.write(b"404 Not Found")
+        if send_body:
+            self.wfile.write(b"404 Not Found")
 
     def do_POST(self):
         path = strip_proxy_prefix(urlparse(self.path).path)
