@@ -1619,17 +1619,42 @@ INGESTION INSTRUCTIONS:
     }, 100);
   }
 
-  // Toast Notification Helper
+  // Toast Notification Helper (Material Snackbar)
   let toastTimer = null;
   window.showToast = function (message, duration) {
     if (!el.toast) return;
-    el.toast.textContent = message;
+    el.toast.innerHTML = `<span class="md-toast-text">${message}</span>`;
     el.toast.classList.add('show');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
       el.toast.classList.remove('show');
-    }, duration || 2400);
+    }, duration || 2600);
   };
+
+  // Material Design 3 Pointer Ripple Effect
+  function attachMaterialRipples() {
+    document.addEventListener('pointerdown', (e) => {
+      const target = e.target.closest('.btn-action, .btn-modal-primary, .btn-modal-secondary, .sh-nav-tab, .nav-cat-item, .subtab-btn, .notif-item');
+      if (!target) return;
+
+      const rect = target.getBoundingClientRect();
+      const ripple = document.createElement('span');
+      ripple.className = 'md-ripple-effect';
+      const size = Math.max(rect.width, rect.height) * 2;
+      const x = e.clientX - rect.left - size / 2;
+      const y = e.clientY - rect.top - size / 2;
+
+      ripple.style.width = ripple.style.height = `${size}px`;
+      ripple.style.left = `${x}px`;
+      ripple.style.top = `${y}px`;
+
+      target.appendChild(ripple);
+
+      setTimeout(() => {
+        ripple.remove();
+      }, 550);
+    });
+  }
 
   // Markdown renderer
   function renderMarkdown(md) {
@@ -2241,6 +2266,7 @@ related:
 
   document.addEventListener('DOMContentLoaded', () => {
     init();
+    attachMaterialRipples();
     fetchNotifications();
     if (window.KBAuth) {
       const user = window.KBAuth.getCurrentUser();

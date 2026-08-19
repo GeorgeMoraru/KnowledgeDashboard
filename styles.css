@@ -67,15 +67,30 @@
   --overlay-soft: rgba(0, 0, 0, 0.2);
   --shadow-drop: rgba(0, 0, 0, 0.35);
 
-  /* Elevation Shadows */
-  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.45);
-  --shadow-card-hover: 0 12px 34px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--accent-primary-border);
-  --shadow-modal: 0 28px 70px rgba(0, 0, 0, 0.85);
+  /* Material Design 3 Elevation Levels */
+  --md-elevation-1: 0px 1px 3px 1px rgba(0, 0, 0, 0.25), 0px 1px 2px 0px rgba(0, 0, 0, 0.35);
+  --md-elevation-2: 0px 2px 6px 2px rgba(0, 0, 0, 0.28), 0px 1px 2px 0px rgba(0, 0, 0, 0.4);
+  --md-elevation-3: 0px 4px 8px 3px rgba(0, 0, 0, 0.32), 0px 1px 3px 0px rgba(0, 0, 0, 0.45);
+  --md-elevation-4: 0px 6px 10px 4px rgba(0, 0, 0, 0.38), 0px 2px 3px 0px rgba(0, 0, 0, 0.5);
+  --md-elevation-5: 0px 8px 12px 6px rgba(0, 0, 0, 0.45), 0px 4px 4px 0px rgba(0, 0, 0, 0.6);
+
+  --shadow-card: var(--md-elevation-1);
+  --shadow-card-hover: var(--md-elevation-3), 0 0 0 1px var(--accent-primary-border);
+  --shadow-modal: var(--md-elevation-5);
+
+  /* Material Design 3 Motion Curves & Durations */
+  --md-motion-standard: cubic-bezier(0.2, 0.0, 0, 1.0);
+  --md-motion-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+  --md-motion-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1.0);
+  --md-motion-accelerate: cubic-bezier(0.3, 0.0, 1.0, 1.0);
+  --md-duration-short: 150ms;
+  --md-duration-medium: 280ms;
+  --md-duration-long: 450ms;
 
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
-  --radius-xl: 22px;
+  --radius-xl: 24px;
   --radius-pill: 9999px;
 
   /* ------------------------------------------------------------------
@@ -2863,5 +2878,115 @@ mark {
 .guest-hidden {
   display: none !important;
 }
+
+/* ==========================================================================
+   Material Design 3 Ripple & Micro-Interactions
+   ========================================================================== */
+.btn-action, .btn-modal-primary, .btn-modal-secondary, .sh-nav-tab, .nav-cat-item, .subtab-btn, .notif-item {
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--md-duration-short) var(--md-motion-standard),
+              background var(--md-duration-medium) var(--md-motion-standard),
+              box-shadow var(--md-duration-medium) var(--md-motion-standard),
+              border-color var(--md-duration-medium) var(--md-motion-standard),
+              color var(--md-duration-short) var(--md-motion-standard);
+}
+
+.btn-action:hover, .btn-modal-primary:hover, .btn-modal-secondary:hover {
+  transform: translateY(-1.5px);
+  box-shadow: var(--md-elevation-2);
+}
+
+.btn-action:active, .btn-modal-primary:active, .btn-modal-secondary:active, .sh-nav-tab:active {
+  transform: scale(0.97) translateY(0);
+  box-shadow: var(--md-elevation-1);
+}
+
+/* Card Material Hover Lift */
+.sh-result-card {
+  transition: transform var(--md-duration-medium) var(--md-motion-emphasized),
+              box-shadow var(--md-duration-medium) var(--md-motion-emphasized),
+              border-color var(--md-duration-medium) var(--md-motion-standard);
+}
+
+.sh-result-card:hover {
+  transform: translateY(-3.5px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Dynamic Ripple Span */
+.md-ripple-effect {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(0);
+  pointer-events: none;
+  animation: md-ripple-anim 0.55s var(--md-motion-decelerate);
+}
+
+@keyframes md-ripple-anim {
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* Material Toast Snackbar */
+.modern-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--accent-primary-border);
+  box-shadow: var(--md-elevation-4);
+  backdrop-filter: blur(20px);
+  border-radius: var(--radius-pill);
+  transform: translateY(20px) scale(0.95);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform var(--md-duration-medium) var(--md-motion-emphasized),
+              opacity var(--md-duration-medium) var(--md-motion-emphasized);
+}
+
+.modern-toast.show {
+  display: inline-flex;
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Smooth Modal Motion */
+.modal-backdrop {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--md-duration-medium) var(--md-motion-standard);
+}
+
+.modal-backdrop.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-window {
+  transform: scale(0.92) translateY(24px);
+  opacity: 0;
+  transition: transform var(--md-duration-long) var(--md-motion-emphasized),
+              opacity var(--md-duration-medium) var(--md-motion-standard);
+}
+
+.modal-backdrop.active .modal-window {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 
 

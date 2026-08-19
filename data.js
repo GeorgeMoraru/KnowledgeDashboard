@@ -1,10 +1,10 @@
 /**
  * SmartHub Knowledge Base - Compiled Data Payload
- * Generated: 2026-08-19 09:30:03
+ * Generated: 2026-08-19 09:33:22
  * Total Assets: 125 | Topics: 18 | General: 36 | Work: 71 | Projects: 12 | Prompt Engineering: 6
  */
 window.KB_DATA = {
-  "generatedAt": "2026-08-19T06:30:03Z",
+  "generatedAt": "2026-08-19T06:33:22Z",
   "stats": {
     "totalNotes": 125,
     "totalTopics": 18,
