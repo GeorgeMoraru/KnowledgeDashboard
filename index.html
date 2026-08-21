@@ -29,7 +29,7 @@
     }
   </script>
 
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 
 <body>
@@ -87,23 +87,23 @@
       <!-- Sidebar Navigation Groups -->
       <div class="sidebar-scrollable">
         
-        <!-- Category Section -->
+        <!-- Knowledge Categories & Topics Section -->
         <div class="sidebar-section">
           <div class="sidebar-section-title">Knowledge Categories</div>
           <!-- Populated from KB_DATA.categories -->
           <div class="category-nav-list" id="categoryBar"></div>
-        </div>
 
-        <!-- Topic Domains Section -->
-        <div class="sidebar-section">
-          <div class="sidebar-section-header">
-            <span class="sidebar-section-title">Topic Domains</span>
-            <span class="sidebar-section-badge" id="topicTotalCount">0</span>
-          </div>
-          <div class="sidebar-topic-select-wrapper">
-            <select id="sidebarTopicSelect" class="sidebar-select-dropdown" onchange="window.selectTopic(this.value)">
-              <option value="All">All Topics</option>
-            </select>
+          <!-- Topics Dropdown embedded directly inside Knowledge Categories -->
+          <div class="sidebar-category-topics-box">
+            <div class="sidebar-sublabel-row">
+              <span class="sidebar-sublabel">Topic Domain</span>
+              <span class="sidebar-section-badge" id="topicTotalCount">0</span>
+            </div>
+            <div class="sidebar-topic-select-wrapper">
+              <select id="sidebarTopicSelect" class="sidebar-select-dropdown" onchange="window.selectTopic(this.value)">
+                <option value="All">All Topics</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -241,11 +241,6 @@
             <span id="topbarSyncBtnText">Sync</span>
           </button>
 
-          <!-- Theme Toggle -->
-          <button id="themeToggleBtn" class="btn-action btn-theme" onclick="window.toggleTheme()" title="Toggle Dark/Light Mode">
-            <span id="themeIcon">🌙</span>
-          </button>
-
           <!-- Settings & Profile Dropdown Menu -->
           <div class="settings-container">
             <button id="topbarSettingsBtn" class="btn-action btn-settings" onclick="window.toggleSettingsMenu(event)" title="Settings & Profile" aria-haspopup="true" aria-expanded="false">
@@ -268,9 +263,6 @@
               <div class="settings-menu-divider"></div>
 
               <!-- Secondary Actions -->
-              <button id="syncDriveBtn" class="settings-menu-item" onclick="window.triggerGoogleDriveSync()" title="Pull the latest knowledge base contents">
-                <span id="syncIconSvg">🔄</span>&nbsp;<span id="syncBtnText">Sync now</span>
-              </button>
               <button id="pwaInstallBtn" class="settings-menu-item hidden" onclick="window.installPWA()" title="Install Knowledge Base Web App">
                 ⬇️ Install app
               </button>
@@ -956,10 +948,10 @@
   </script>
 
   <!-- KB connection layer (must run before app.js), auth, graph, then app -->
-  <script src="kb-source.js?v=16"></script>
-  <script src="auth.js?v=16"></script>
-  <script src="graph.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="kb-source.js?v=17"></script>
+  <script src="auth.js?v=17"></script>
+  <script src="graph.js?v=17"></script>
+  <script src="app.js?v=17"></script>
 </body>
 
 </html>

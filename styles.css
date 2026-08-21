@@ -471,6 +471,32 @@ html, body{
   border-color: color-mix(in srgb, var(--cat-accent, var(--accent-primary)) 38%, transparent);
 }
 
+.sidebar-category-topics-box {
+  margin-top: 12px;
+  padding: 10px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-sublabel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+.sidebar-sublabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
 /* Topic Domains List in Sidebar */
 .sidebar-section-header {
   display: flex;
