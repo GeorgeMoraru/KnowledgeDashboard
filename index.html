@@ -29,7 +29,7 @@
     }
   </script>
 
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 
 <body>
@@ -100,8 +100,10 @@
             <span class="sidebar-section-title">Topic Domains</span>
             <span class="sidebar-section-badge" id="topicTotalCount">0</span>
           </div>
-          <div class="topic-nav-list" id="topicFacetList">
-            <!-- Dynamically populated with rich topic items -->
+          <div class="sidebar-topic-select-wrapper">
+            <select id="sidebarTopicSelect" class="sidebar-select-dropdown" onchange="window.selectTopic(this.value)">
+              <option value="All">All Topics</option>
+            </select>
           </div>
         </div>
 
@@ -365,12 +367,20 @@
         <!-- Hero Metrics Strip — total card + one card per category, from KB_DATA.categories -->
         <section class="metrics-grid" id="metricsGrid"></section>
 
-        <!-- Topic Pills & View Controls Navigation Strip -->
+        <!-- Topic Dropdown & View Controls Navigation Strip -->
         <section class="controls-ribbon">
           
-          <!-- Topic Pills Scroller -->
-          <div class="topic-pills-scroller" id="topicTabs">
-            <!-- Dynamically populated from active category topics -->
+          <!-- Topic Dropdown Selector -->
+          <div class="topic-dropdown-container">
+            <label for="topicSelectDropdown" class="topic-dropdown-label">
+              <span class="topic-dropdown-icon">📂</span>
+              <span class="topic-dropdown-text">Topic:</span>
+            </label>
+            <div class="topic-select-wrapper">
+              <select id="topicSelectDropdown" class="topic-select-dropdown" onchange="window.selectTopic(this.value)">
+                <option value="All">All Topics</option>
+              </select>
+            </div>
           </div>
 
           <!-- View Switchers -->
@@ -927,10 +937,10 @@
   </script>
 
   <!-- KB connection layer (must run before app.js), auth, graph, then app -->
-  <script src="kb-source.js?v=13"></script>
-  <script src="auth.js?v=13"></script>
-  <script src="graph.js?v=13"></script>
-  <script src="app.js?v=13"></script>
+  <script src="kb-source.js?v=14"></script>
+  <script src="auth.js?v=14"></script>
+  <script src="graph.js?v=14"></script>
+  <script src="app.js?v=14"></script>
 </body>
 
 </html>

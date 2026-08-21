@@ -541,75 +541,33 @@
       return true;
     });
 
-    // 1. Dynamic Top Navigation Tabs (Topic Tabs)
-    if (el.topicTabs) {
-      const availableTopics = Array.from(new Set(catFilteredNotes.map(n => n.topic))).sort();
-      let tabsHtml = `<div class="sh-nav-tab ${state.selectedTopic === 'All' ? 'active' : ''}" data-topic="All" onclick="window.selectTopic('All')">All in Category (${catFilteredNotes.length})</div>`;
-      availableTopics.forEach(t => {
-        const count = catFilteredNotes.filter(n => n.topic === t).length;
-        tabsHtml += `<div class="sh-nav-tab ${state.selectedTopic === t ? 'active' : ''}" data-topic="${escapeHtml(t)}" onclick="window.selectTopic('${escapeHtml(t)}')">${escapeHtml(t)} (${count})</div>`;
-      });
-      el.topicTabs.innerHTML = tabsHtml;
+    // 1. Dynamic Topic Dropdown Selectors (both sidebar and controls ribbon)
+    const availableTopics = Array.from(new Set(catFilteredNotes.map(n => n.topic))).sort();
+    let topicOptionsHtml = `<option value="All">All Topics (${catFilteredNotes.length})</option>`;
+    availableTopics.forEach(t => {
+      const count = catFilteredNotes.filter(n => n.topic === t).length;
+      topicOptionsHtml += `<option value="${escapeHtml(t)}"${state.selectedTopic === t ? ' selected' : ''}>${escapeHtml(t)} (${count})</option>`;
+    });
+
+    const topicSelectDropdown = document.getElementById('topicSelectDropdown');
+    if (topicSelectDropdown) {
+      topicSelectDropdown.innerHTML = topicOptionsHtml;
+      topicSelectDropdown.value = state.selectedTopic;
     }
 
-    // 2. Interactive Topic Domains List in Sidebar
-    const topicCounts = {};
-    searchFilteredNotes.forEach(n => { topicCounts[n.topic] = (topicCounts[n.topic] || 0) + 1; });
-
-    if (el.topicFacetList) {
-      const allAvailableTopics = state.topics.map(t => {
-        const sample = state.notes.find(n => n.topic === t);
-        const count = catFilteredNotes.filter(n => n.topic === t).length;
-        return { name: t, color: topicColor(sample && sample.domain), count };
-      }).filter(t => state.selectedCategory === 'all' || t.count > 0);
-
-      let topicListHtml = `
-        <div class="nav-topic-row ${state.selectedTopic === 'All' ? 'active' : ''}">
-          <button class="nav-topic-item ${state.selectedTopic === 'All' ? 'active' : ''}" onclick="window.selectTopic('All')">
-            <div class="nav-topic-left">
-              <span class="topic-dot"></span>
-              <span class="topic-name">All Topics</span>
-            </div>
-            <span class="nav-topic-badge">${catFilteredNotes.length}</span>
-          </button>
-        </div>
-      `;
-
-      allAvailableTopics.forEach(t => {
-        const isActive = state.selectedTopic === t.name;
-        topicListHtml += `
-          <div class="nav-topic-row ${isActive ? 'active' : ''}">
-            <button class="nav-topic-item ${isActive ? 'active' : ''}" onclick="window.selectTopic('${escapeHtml(t.name)}')">
-              <div class="nav-topic-left">
-                <span class="topic-dot" style="--topic-accent:${t.color};"></span>
-                <span class="topic-name">${escapeHtml(t.name)}</span>
-              </div>
-              <span class="nav-topic-badge">${t.count}</span>
-            </button>
-            <button class="topic-delete-icon-btn" onclick="event.stopPropagation(); window.promptDeleteTopic('${escapeHtml(t.name)}')" title="Delete Topic '${escapeHtml(t.name)}'">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-            </button>
-          </div>
-        `;
-      });
-
-      el.topicFacetList.innerHTML = topicListHtml;
-      if (el.topicTotalCount) el.topicTotalCount.textContent = allAvailableTopics.length;
+    const sidebarTopicSelect = document.getElementById('sidebarTopicSelect');
+    if (sidebarTopicSelect) {
+      sidebarTopicSelect.innerHTML = topicOptionsHtml;
+      sidebarTopicSelect.value = state.selectedTopic;
     }
-
-    // 3. Scope Select & Topic Domains Sidebar Dropdown
-    const optionsHtml = `<option value="All">All Topics (${searchFilteredNotes.length})</option>` +
-      state.topics.map(t => {
-        const count = topicCounts[t] || 0;
-        return `<option value="${escapeHtml(t)}" ${state.selectedTopic === t ? 'selected' : ''}>${escapeHtml(t)} (${count})</option>`;
-      }).join('');
 
     if (el.topicScopeSelect) {
-      el.topicScopeSelect.innerHTML = optionsHtml;
+      el.topicScopeSelect.innerHTML = topicOptionsHtml;
       el.topicScopeSelect.value = state.selectedTopic;
+    }
+
+    if (el.topicTotalCount) {
+      el.topicTotalCount.textContent = availableTopics.length;
     }
 
     // Dynamic Graph Legend — the 8 biggest topics, then an explicit count of

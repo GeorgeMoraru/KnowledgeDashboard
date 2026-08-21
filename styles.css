@@ -1145,7 +1145,7 @@ html, body{
 }
 
 /* ==========================================================================
-   Controls Ribbon: Topic Pills & View Toggles
+   Controls Ribbon: Topic Dropdown & View Toggles
    ========================================================================== */
 .controls-ribbon {
   display: flex;
@@ -1158,45 +1158,71 @@ html, body{
   padding: 10px 14px;
 }
 
-/* Horizontal scroller. The padding is not decoration: without it the active
-   pill's focus ring and drop shadow get clipped by the overflow box. */
-.topic-pills-scroller{
+.topic-dropdown-container {
   display: flex;
   align-items: center;
+  gap: 10px;
+  min-width: 240px;
+  max-width: 380px;
   flex: 1 1 auto;
-  min-width: 0;
+}
+
+.topic-dropdown-label {
+  display: flex;
+  align-items: center;
   gap: 6px;
-  padding: 4px 2px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  scroll-padding-inline: 8px;
-}
-
-.topic-pills-scroller::-webkit-scrollbar{
-  display: none;
-}
-
-.sh-nav-tab{
-  /* No shrinking: the scroller scrolls. Shrinking clipped every label down to
-     two characters as soon as the ribbon ran out of room. */
-  flex-shrink: 0;
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-secondary);
-  background: var(--bg-surface-alt);
-  border: 1px solid var(--border-subtle);
-  cursor: pointer;
   white-space: nowrap;
-  transition: all 0.12s ease;
 }
 
-.sh-nav-tab:hover{
-  background: var(--bg-card-hover);
+.topic-dropdown-icon {
+  font-size: 14px;
+}
+
+.topic-select-wrapper,
+.sidebar-topic-select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.topic-select-dropdown,
+.sidebar-select-dropdown {
+  width: 100%;
+  padding: 7px 32px 7px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b5cf6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: all 0.15s ease;
+}
+
+.topic-select-dropdown:hover,
+.sidebar-select-dropdown:hover {
+  background-color: var(--bg-card-hover);
   border-color: var(--border-hover);
+}
+
+.topic-select-dropdown:focus,
+.sidebar-select-dropdown:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-glow);
+}
+
+.sidebar-select-dropdown {
+  padding: 8px 30px 8px 10px;
+  font-size: 12.5px;
 }
 
 .sh-nav-tab.active{
