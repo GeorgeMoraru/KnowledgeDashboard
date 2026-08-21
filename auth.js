@@ -42,18 +42,33 @@
     try { localStorage.setItem(LS_CONFIG, JSON.stringify(cfg)); } catch (e) { /* private mode */ }
   }
 
-  /** Asks the connected knowledge base for its auth config. Never throws. */
+  /** Asks the connected knowledge base or ProjectsProxi for its auth config. Never throws. */
   async function remoteConfig() {
     try {
       const res = window.KBSource
         ? await window.KBSource.fetch('/api/config/auth')
         : await fetch('./api/config/auth');
-      if (!res.ok) return null;
-      const cfg = await res.json();
-      return isUsable(cfg) ? cfg : null;
-    } catch (e) {
-      return null;
+      if (res && res.ok) {
+        const cfg = await res.json();
+        if (isUsable(cfg)) return cfg;
+      }
+    } catch (e) {}
+
+    const proxyEndpoints = [
+      'https://themeanmachine.taild1868e.ts.net/projectsproxi/api/config/knowledgebase',
+      'https://themeanmachine.taild1868e.ts.net:10006/api/config/knowledgebase',
+      'http://127.0.0.1:8765/api/config/knowledgebase'
+    ];
+    for (const ep of proxyEndpoints) {
+      try {
+        const res = await fetch(ep);
+        if (res && res.ok) {
+          const cfg = await res.json();
+          if (isUsable(cfg)) return cfg;
+        }
+      } catch (e) {}
     }
+    return null;
   }
 
   function loadScript(src) {

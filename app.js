@@ -2813,11 +2813,7 @@ related:
       });
   };
 
-  /* ==========================================================================
-     Knowledge Base Source Controller
-     ========================================================================== */
-
-  /** Reflects the current connection in the topbar pill. */
+  /* ============================  /** Reflects the current connection in the UI and Settings menu. */
   function updateSourceUI() {
     const pill = document.getElementById('kbSourcePill');
     const label = document.getElementById('kbSourceLabel');
@@ -2846,6 +2842,25 @@ related:
       pill.title = status.mode === 'live'
         ? `Connected to ${status.label} — read/write. Click to change.`
         : `${readOnlyReason()} Click to change.`;
+    }
+
+    // Settings Menu KB Status Button (Green / Red indicator)
+    const settingsKbBtn = document.getElementById('settingsKbConnectBtn');
+    const settingsKbText = document.getElementById('settingsKbText');
+    const settingsKbHost = document.getElementById('settingsKbHost');
+    const settingsKbDot = document.getElementById('settingsKbDot');
+    if (settingsKbBtn) {
+      const isLive = status.mode === 'live';
+      settingsKbBtn.className = `settings-kb-status-btn ${isLive ? 'status-connected' : 'status-disconnected'}`;
+      if (settingsKbText) settingsKbText.textContent = isLive ? 'KB Connected' : 'KB Not Connected';
+      if (settingsKbHost) {
+        settingsKbHost.textContent = status.baseUrl
+          ? (status.label || status.baseUrl.replace(/^https?:\/\//, ''))
+          : 'Click to configure';
+      }
+      if (settingsKbDot) {
+        settingsKbDot.className = `status-indicator-dot ${isLive ? 'is-live' : 'is-error'}`;
+      }
     }
 
     // Sidebar footer mirrors the same truth, worded for the "is it live?" glance.
@@ -2905,38 +2920,49 @@ related:
   if (window.KBSource) window.KBSource.onChange(updateSourceUI);
 
   /* ==========================================================================
-     Google Authentication Controller
+     Google Authentication & Auth Gate Controller
      ========================================================================== */
 
   function updateAuthUI(user) {
-    const signInBtn = document.getElementById('googleSignInBtn');
-    const profileChip = document.getElementById('userProfileChip');
-    const avatarImg = document.getElementById('userAvatarImg');
-    const displayName = document.getElementById('userDisplayName');
-    const menuName = document.getElementById('userMenuName');
-    const menuEmail = document.getElementById('userMenuEmail');
+    const authGate = document.getElementById('authGateScreen');
+    const menuAvatar = document.getElementById('settingsUserAvatar');
+    const menuName = document.getElementById('settingsUserName');
+    const menuEmail = document.getElementById('settingsUserEmail');
+    const logoutBtn = document.getElementById('settingsLogoutBtn');
 
     if (user) {
-      if (signInBtn) signInBtn.classList.add('hidden');
-      if (profileChip) profileChip.classList.remove('hidden');
-      if (avatarImg) {
-        avatarImg.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'User')}&background=8b5cf6&color=fff`;
+      if (authGate) authGate.classList.add('hidden');
+      if (menuAvatar) {
+        menuAvatar.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'User')}&background=8b5cf6&color=fff`;
       }
       const name = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
-      if (displayName) displayName.textContent = name;
       if (menuName) menuName.textContent = user.displayName || name;
       if (menuEmail) menuEmail.textContent = user.email || '';
+      if (logoutBtn) logoutBtn.classList.remove('hidden');
     } else {
-      if (signInBtn) signInBtn.classList.remove('hidden');
-      if (profileChip) profileChip.classList.add('hidden');
-      const menuDropdown = document.getElementById('userMenuDropdown');
-      if (menuDropdown) menuDropdown.classList.add('hidden');
+      if (authGate) authGate.classList.remove('hidden');
+      if (menuAvatar) {
+        menuAvatar.src = `https://ui-avatars.com/api/?name=User&background=6b7280&color=fff`;
+      }
+      if (menuName) menuName.textContent = 'Not Signed In';
+      if (menuEmail) menuEmail.textContent = 'Sign in with Google';
+      if (logoutBtn) logoutBtn.classList.add('hidden');
     }
   }
 
   window.handleGoogleLogin = async function () {
     if (!window.KBAuth) {
-      if (window.showToast) window.showToast('Google Sign-In is not configured for this deployment.', 4000);
+      const statusEl = document.getElementById('authGateStatus');
+      if (statusEl) statusEl.textContent = 'Initializing authentication... please retry in a moment.';
+      if (window.showToast) window.showToast('Signing in with Google…', 3000);
+      try {
+        if (typeof firebase !== 'undefined' && firebase.auth) {
+          const provider = new firebase.auth.GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: 'select_account' });
+          await firebase.auth().signInWithPopup(provider);
+          return;
+        }
+      } catch (e) {}
       return;
     }
     try {
@@ -2944,6 +2970,8 @@ related:
       await window.KBAuth.loginWithGoogle();
     } catch (err) {
       console.error('Login error:', err);
+      const statusEl = document.getElementById('authGateStatus');
+      if (statusEl) statusEl.textContent = 'Sign-in error: ' + (err.message || 'Please try again.');
     }
   };
 
@@ -2952,73 +2980,50 @@ related:
     try {
       await window.KBAuth.logout();
       showToast('Signed out.', 2500);
+      closeSettingsMenu();
     } catch (err) {
       console.error('Logout error:', err);
     }
   };
 
-  window.toggleUserMenu = function (e) {
+  /* Settings Menu Controller */
+  window.toggleSettingsMenu = function (e) {
     if (e) e.stopPropagation();
-    const dropdown = document.getElementById('userMenuDropdown');
-    if (dropdown) dropdown.classList.toggle('hidden');
-  };
-
-  window.addEventListener('click', () => {
-    const dropdown = document.getElementById('userMenuDropdown');
-    if (dropdown && !dropdown.classList.contains('hidden')) {
-      dropdown.classList.add('hidden');
-    }
+    const menu = document.getElementById('settingsDropdownMenu') || document.getElementById('topbarMoreMenu');
+    const btn = document.getElementById('topbarSettingsBtn') || document.getElementById('topbarMoreBtn');
+    if (!menu) return;
+    const isOpening = menu.classList.contains('hidden');
+    menu.classList.toggle('hidden', !isOpening);
+    if (btn) btn.setAttribute('aria-expanded', isOpening ? 'true' : 'false');
+    
+    // Close notification panel if open
     const notifDropdown = document.getElementById('notifPanelDropdown');
     if (notifDropdown && !notifDropdown.classList.contains('hidden')) {
+      notifDropdown.classList.add('hidden');
+    }
+  };
+
+  window.toggleTopbarMore = window.toggleSettingsMenu;
+
+  function closeSettingsMenu() {
+    const menu = document.getElementById('settingsDropdownMenu') || document.getElementById('topbarMoreMenu');
+    const btn = document.getElementById('topbarSettingsBtn') || document.getElementById('topbarMoreBtn');
+    if (menu && !menu.classList.contains('hidden')) menu.classList.add('hidden');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  window.addEventListener('click', (e) => {
+    if (!e.target.closest('.settings-container') && !e.target.closest('.topbar-more')) {
+      closeSettingsMenu();
+    }
+    const notifDropdown = document.getElementById('notifPanelDropdown');
+    if (notifDropdown && !notifDropdown.classList.contains('hidden') && !e.target.closest('.notification-container')) {
       notifDropdown.classList.add('hidden');
     }
   });
 
   window.addEventListener('kb:auth_changed', (e) => {
     updateAuthUI(e.detail ? e.detail.user : null);
-  });
-
-  /* ==========================================================================
-     Notification System Controller
-     ========================================================================== */
-
-  let unreadNotificationsCount = 0;
-  let cachedNotifications = [];
-
-  window.toggleNotificationPanel = function (e) {
-    if (e) e.stopPropagation();
-    const dropdown = document.getElementById('notifPanelDropdown');
-    if (dropdown) {
-      const isOpening = dropdown.classList.contains('hidden');
-      dropdown.classList.toggle('hidden');
-      if (isOpening) {
-        fetchNotifications();
-      }
-    }
-  };
-
-  /* Topbar overflow ("More") menu — holds the secondary actions so the bar never wraps. */
-  window.toggleTopbarMore = function (e) {
-    if (e) e.stopPropagation();
-    const menu = document.getElementById('topbarMoreMenu');
-    const btn = document.getElementById('topbarMoreBtn');
-    if (!menu) return;
-    const opening = menu.classList.contains('hidden');
-    menu.classList.toggle('hidden', !opening);
-    if (btn) btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
-  };
-
-  function closeTopbarMore() {
-    const menu = document.getElementById('topbarMoreMenu');
-    const btn = document.getElementById('topbarMoreBtn');
-    if (menu && !menu.classList.contains('hidden')) menu.classList.add('hidden');
-    if (btn) btn.setAttribute('aria-expanded', 'false');
-  }
-
-  // Any click outside the overflow menu closes it; menu items close it after acting.
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('.topbar-more')) closeTopbarMore();
-    else if (e.target.closest('.more-menu-item')) closeTopbarMore();
   });
 
   window.markAllNotificationsRead = function () {

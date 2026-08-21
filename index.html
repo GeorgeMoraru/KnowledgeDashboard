@@ -29,10 +29,38 @@
     }
   </script>
 
-  <link rel="stylesheet" href="styles.css?v=10">
+  <link rel="stylesheet" href="styles.css?v=11">
 </head>
 
 <body>
+
+  <!-- Full Screen Google Sign-In Gate (Dashboard locked until authenticated) -->
+  <div id="authGateScreen" class="auth-gate-screen">
+    <div class="auth-gate-card">
+      <div class="auth-brand-logo">
+        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a8 8 0 0 0-8 8c0 3.3 2 6.2 5 7.4V20a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2.6c3-1.2 5-4.1 5-7.4a8 8 0 0 0-8-8z"></path>
+          <line x1="9.5" y1="9" x2="9.51" y2="9"></line>
+          <line x1="14.5" y1="9" x2="14.51" y2="9"></line>
+          <path d="M9.5 13a3.5 3.5 0 0 0 5 0"></path>
+        </svg>
+      </div>
+      <h1 class="auth-gate-title">Knowledge Base</h1>
+      <p class="auth-gate-subtitle">Second Brain &amp; LLM Wiki</p>
+      <div class="auth-gate-divider"></div>
+      <p class="auth-gate-msg">Sign in with your Google account to access your knowledge base.</p>
+      <button id="authGateLoginBtn" class="btn-google-auth-gate" onclick="window.handleGoogleLogin()">
+        <svg width="18" height="18" viewBox="0 0 24 24">
+          <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.3 9 5 12 5z"/>
+          <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/>
+          <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15.2s.7 5.5 1.9 7.9l3.7-2.9z"/>
+          <path fill="#34A853" d="M12 23.5c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16.5C3.7 20.2 7.5 23.5 12 23.5z"/>
+        </svg>
+        <span>Sign in with Google</span>
+      </button>
+      <div id="authGateStatus" class="auth-gate-status"></div>
+    </div>
+  </div>
 
   <div class="app-layout">
     
@@ -152,14 +180,8 @@
           </div>
         </div>
 
-        <!-- Right: KB connection, actions, auth. Secondary actions live in the More menu. -->
+        <!-- Right: Actions & Settings -->
         <div class="topbar-right">
-
-          <!-- Knowledge Base Connection Pill -->
-          <button id="kbSourcePill" class="kb-source-pill" onclick="window.openKbSourceSettings()" title="Knowledge base connection">
-            <span id="kbSourceDot" class="kb-source-dot"></span>
-            <span id="kbSourceLabel" class="kb-source-label">Connecting…</span>
-          </button>
 
           <!-- Notification Bell & Ingestion Activity Feed -->
           <div class="notification-container">
@@ -198,60 +220,57 @@
             <span id="ingestBtnLabel">Ingest</span>
           </button>
 
-          <!-- Google Sign-In & User Profile -->
-          <div id="userAuthContainer" class="user-auth-container">
-            <button id="googleSignInBtn" class="btn-action btn-google-login" onclick="window.handleGoogleLogin()" title="Sign in with Google">
-              <svg width="14" height="14" viewBox="0 0 24 24">
-                <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.3 9 5 12 5z"/>
-                <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/>
-                <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15.2s.7 5.5 1.9 7.9l3.7-2.9z"/>
-                <path fill="#34A853" d="M12 23.5c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.3-6.4-5.2L1.9 16.5C3.7 20.2 7.5 23.5 12 23.5z"/>
-              </svg>
-              <span>Sign In</span>
-            </button>
-            <div id="userProfileChip" class="user-profile-chip hidden" onclick="window.toggleUserMenu(event)" title="User Profile">
-              <img id="userAvatarImg" class="user-avatar" src="" alt="Avatar" />
-              <span id="userDisplayName" class="user-name">User</span>
-              <div id="userMenuDropdown" class="user-menu-dropdown hidden">
-                <div class="user-menu-header">
-                  <div id="userMenuName" class="user-menu-name"></div>
-                  <div id="userMenuEmail" class="user-menu-email"></div>
-                </div>
-                <div class="user-menu-divider"></div>
-                <button class="user-menu-item" onclick="window.handleGoogleLogout()">
-                  🚪 Sign Out
-                </button>
-              </div>
-            </div>
-          </div>
-
           <!-- Theme Toggle -->
           <button id="themeToggleBtn" class="btn-action btn-theme" onclick="window.toggleTheme()" title="Toggle Dark/Light Mode">
             <span id="themeIcon">🌙</span>
           </button>
 
-          <!-- Overflow Menu: secondary actions, kept out of the main bar so it never wraps -->
-          <div class="topbar-more">
-            <button id="topbarMoreBtn" class="btn-action btn-more" onclick="window.toggleTopbarMore(event)" title="More actions" aria-haspopup="true" aria-expanded="false">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="5" cy="12" r="1.8"></circle>
-                <circle cx="12" cy="12" r="1.8"></circle>
-                <circle cx="19" cy="12" r="1.8"></circle>
+          <!-- Settings & Profile Dropdown Menu -->
+          <div class="settings-container">
+            <button id="topbarSettingsBtn" class="btn-action btn-settings" onclick="window.toggleSettingsMenu(event)" title="Settings & Profile" aria-haspopup="true" aria-expanded="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
               </svg>
             </button>
-            <div id="topbarMoreMenu" class="topbar-more-menu hidden">
-              <div class="more-menu-stat">
+            <div id="settingsDropdownMenu" class="settings-dropdown-menu hidden">
+              
+              <!-- User Profile Section -->
+              <div class="settings-user-card">
+                <img id="settingsUserAvatar" class="settings-user-avatar" src="https://ui-avatars.com/api/?name=User&background=8b5cf6&color=fff" alt="Avatar" />
+                <div class="settings-user-details">
+                  <div id="settingsUserName" class="settings-user-name">User</div>
+                  <div id="settingsUserEmail" class="settings-user-email">user@gmail.com</div>
+                </div>
+              </div>
+              <button id="settingsLogoutBtn" class="settings-menu-item btn-settings-logout" onclick="window.handleGoogleLogout()" title="Sign out of your account">
+                <span class="settings-item-icon">🚪</span>
+                <span>Sign Out</span>
+              </button>
+
+              <div class="settings-menu-divider"></div>
+
+              <!-- Knowledge Base Connection Status (Green/Red Button) -->
+              <div class="settings-menu-section-label">Knowledge Base Status</div>
+              <button id="settingsKbConnectBtn" class="settings-kb-status-btn status-disconnected" onclick="window.openKbSourceSettings()" title="Configure Knowledge Base Connection">
+                <div class="settings-kb-status-left">
+                  <span id="settingsKbDot" class="status-indicator-dot is-error"></span>
+                  <span id="settingsKbText" class="settings-kb-text">KB Not Connected</span>
+                </div>
+                <span id="settingsKbHost" class="settings-kb-host">Click to configure</span>
+              </button>
+
+              <div class="settings-menu-divider"></div>
+
+              <!-- Statistics & Sync Actions -->
+              <div class="settings-menu-stat">
                 <span class="chip-dot"></span>
                 <span id="totalNotesStat">—</span>&nbsp;notes indexed
               </div>
-              <div class="more-menu-divider"></div>
-              <button class="more-menu-item" onclick="window.openKbSourceSettings()">
-                🔌 Knowledge base connection…
-              </button>
-              <button id="syncDriveBtn" class="more-menu-item" onclick="window.triggerGoogleDriveSync()" title="Pull the latest knowledge base contents">
+              <button id="syncDriveBtn" class="settings-menu-item" onclick="window.triggerGoogleDriveSync()" title="Pull the latest knowledge base contents">
                 <span id="syncIconSvg">🔄</span>&nbsp;<span id="syncBtnText">Sync now</span>
               </button>
-              <button id="pwaInstallBtn" class="more-menu-item hidden" onclick="window.installPWA()" title="Install Knowledge Base Web App">
+              <button id="pwaInstallBtn" class="settings-menu-item hidden" onclick="window.installPWA()" title="Install Knowledge Base Web App">
                 ⬇️ Install app
               </button>
             </div>
@@ -843,11 +862,11 @@
     }
   </script>
 
-  <!-- KB connection layer (must run before app.js), optional auth, then the app -->
-  <script src="kb-source.js?v=10"></script>
-  <script src="auth.js?v=10"></script>
-  <script src="graph.js?v=10"></script>
-  <script src="app.js?v=10"></script>
+  <!-- KB connection layer (must run before app.js), auth, graph, then app -->
+  <script src="kb-source.js?v=11"></script>
+  <script src="auth.js?v=11"></script>
+  <script src="graph.js?v=11"></script>
+  <script src="app.js?v=11"></script>
 </body>
 
 </html>
