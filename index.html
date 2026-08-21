@@ -29,7 +29,7 @@
     }
   </script>
 
-  <link rel="stylesheet" href="styles.css?v=11">
+  <link rel="stylesheet" href="styles.css?v=12">
 </head>
 
 <body>
@@ -98,7 +98,7 @@
         <div class="sidebar-section">
           <div class="sidebar-section-header">
             <span class="sidebar-section-title">Topic Domains</span>
-            <span class="sidebar-section-badge" id="topicTotalCount">—</span>
+            <span class="sidebar-section-badge" id="topicTotalCount">0</span>
           </div>
           <div class="topic-nav-list" id="topicFacetList">
             <!-- Dynamically populated with rich topic items -->
@@ -125,11 +125,11 @@
 
       <!-- Sidebar Footer Status — filled in by updateSourceUI() -->
       <div class="sidebar-footer">
-        <button class="footer-system-status" onclick="window.openKbSourceSettings()" title="Change knowledge base">
+        <button id="sidebarKbStatusBtn" class="footer-system-status status-disconnected" onclick="window.openKbSourceSettings()" title="Configure Knowledge Base Connection">
           <span class="status-indicator-dot" id="footerStatusDot"></span>
           <span class="status-text">
-            <span class="status-title" id="footerStatusTitle">Connecting…</span>
-            <span class="status-subtitle" id="footerStatusSubtitle">Locating knowledge base</span>
+            <span class="status-title" id="footerStatusTitle">KB Not Connected</span>
+            <span class="status-subtitle" id="footerStatusSubtitle">Click to configure</span>
           </span>
         </button>
       </div>
@@ -250,18 +250,6 @@
 
               <div class="settings-menu-divider"></div>
 
-              <!-- Knowledge Base Connection Status (Green/Red Button) -->
-              <div class="settings-menu-section-label">Knowledge Base Status</div>
-              <button id="settingsKbConnectBtn" class="settings-kb-status-btn status-disconnected" onclick="window.openKbSourceSettings()" title="Configure Knowledge Base Connection">
-                <div class="settings-kb-status-left">
-                  <span id="settingsKbDot" class="status-indicator-dot is-error"></span>
-                  <span id="settingsKbText" class="settings-kb-text">KB Not Connected</span>
-                </div>
-                <span id="settingsKbHost" class="settings-kb-host">Click to configure</span>
-              </button>
-
-              <div class="settings-menu-divider"></div>
-
               <!-- Statistics & Sync Actions -->
               <div class="settings-menu-stat">
                 <span class="chip-dot"></span>
@@ -283,18 +271,94 @@
       <!-- Main Body Container -->
       <main class="app-body">
 
-        <!-- Shown when no knowledge base could be reached and nothing is cached -->
-        <section id="kbConnectPrompt" class="kb-connect-prompt hidden">
-          <div class="kb-connect-card">
-            <div class="kb-connect-icon">🔌</div>
-            <h2>Connect a knowledge base</h2>
-            <p id="kbConnectReason">This dashboard reads its notes from a knowledge base server. Point it at yours to get started.</p>
-            <button class="btn-modal-primary" onclick="window.openKbSourceSettings()">Choose a knowledge base</button>
-            <p class="kb-connect-hint">
-              Run <code>python server/kb_server.py</code> in your KnowledgeBase repo, expose it with
-              <code>tailscale serve</code>, then paste that URL here. It is remembered on this device.
-            </p>
+        <!-- Shown when Knowledge Base is not connected or empty -->
+        <section id="kbEmptyState" class="kb-empty-state">
+          <div class="kb-empty-illustration-box">
+            <svg class="kb-empty-cosmic-svg" viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="cosmicGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="var(--accent-violet)" stop-opacity="0.8"/>
+                  <stop offset="50%" stop-color="var(--accent-primary)" stop-opacity="0.6"/>
+                  <stop offset="100%" stop-color="var(--accent-mint)" stop-opacity="0.7"/>
+                </linearGradient>
+                <filter id="cosmicBlur" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="8" result="blur"/>
+                  <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+                </filter>
+              </defs>
+
+              <!-- Nebula Background Cloud -->
+              <ellipse cx="200" cy="140" rx="140" ry="85" fill="url(#cosmicGlow)" opacity="0.12" filter="url(#cosmicBlur)"/>
+
+              <!-- Constellation Knowledge Graph -->
+              <g stroke="var(--accent-primary)" stroke-width="1.2" opacity="0.35" stroke-dasharray="3 3">
+                <line x1="70" y1="80" x2="130" y2="60"/>
+                <line x1="130" y1="60" x2="190" y2="90"/>
+                <line x1="190" y1="90" x2="270" y2="60"/>
+                <line x1="270" y1="60" x2="330" y2="100"/>
+                <line x1="130" y1="60" x2="160" y2="150"/>
+                <line x1="270" y1="60" x2="240" y2="150"/>
+                <line x1="160" y1="150" x2="240" y2="150"/>
+                <line x1="80" y1="190" x2="160" y2="150"/>
+                <line x1="320" y1="190" x2="240" y2="150"/>
+              </g>
+
+              <!-- Constellation Star Nodes -->
+              <circle cx="70" cy="80" r="3" fill="var(--accent-violet)" opacity="0.8"/>
+              <circle cx="130" cy="60" r="4.5" fill="var(--accent-primary)" filter="url(#cosmicBlur)"/>
+              <circle cx="190" cy="90" r="3.5" fill="var(--accent-mint)"/>
+              <circle cx="270" cy="60" r="4.5" fill="var(--accent-primary)" filter="url(#cosmicBlur)"/>
+              <circle cx="330" cy="100" r="3" fill="var(--accent-violet)" opacity="0.8"/>
+              <circle cx="80" cy="190" r="3.5" fill="var(--accent-mint)"/>
+              <circle cx="320" cy="190" r="3.5" fill="var(--accent-violet)"/>
+
+              <!-- Floating Asteroid Island -->
+              <path d="M 120 220 C 140 212, 260 212, 280 220 C 290 235, 270 250, 240 255 C 200 260, 160 258, 130 250 C 110 242, 110 228, 120 220 Z" fill="var(--bg-surface-alt)" stroke="var(--border-hover)" stroke-width="1.8"/>
+              <circle cx="150" cy="235" r="4" fill="var(--border-subtle)" opacity="0.6"/>
+              <circle cx="230" cy="238" r="6" fill="var(--border-subtle)" opacity="0.6"/>
+              <circle cx="255" cy="230" r="3" fill="var(--border-subtle)" opacity="0.5"/>
+
+              <!-- Floating Knowledge Astronaut -->
+              <!-- Body -->
+              <rect x="184" y="145" width="32" height="42" rx="14" fill="var(--bg-card-hover)" stroke="var(--border-hover)" stroke-width="2"/>
+              <!-- Backpack / Jetpack -->
+              <rect x="176" y="148" width="10" height="30" rx="4" fill="var(--bg-surface-alt)" stroke="var(--border-subtle)" stroke-width="1.5"/>
+              <rect x="214" y="148" width="10" height="30" rx="4" fill="var(--bg-surface-alt)" stroke="var(--border-subtle)" stroke-width="1.5"/>
+              <!-- Jetpack glow sparks -->
+              <circle cx="181" cy="184" r="2.5" fill="var(--accent-mint)" opacity="0.8"/>
+              <circle cx="219" cy="184" r="2.5" fill="var(--accent-mint)" opacity="0.8"/>
+              <!-- Legs -->
+              <rect x="187" y="184" width="10" height="22" rx="5" fill="var(--bg-card-hover)" stroke="var(--border-hover)" stroke-width="1.8"/>
+              <rect x="203" y="184" width="10" height="22" rx="5" fill="var(--bg-card-hover)" stroke="var(--border-hover)" stroke-width="1.8"/>
+              <ellipse cx="192" cy="207" rx="7" ry="4" fill="var(--bg-surface-alt)" stroke="var(--border-hover)" stroke-width="1.5"/>
+              <ellipse cx="208" cy="207" rx="7" ry="4" fill="var(--bg-surface-alt)" stroke="var(--border-hover)" stroke-width="1.5"/>
+              <!-- Helmet -->
+              <circle cx="200" cy="130" r="20" fill="var(--bg-surface-alt)" stroke="var(--border-hover)" stroke-width="2"/>
+              <ellipse cx="200" cy="130" rx="14" ry="11" fill="url(#cosmicGlow)" stroke="var(--accent-primary)" stroke-width="1.5"/>
+              <!-- Helmet Visor Glint -->
+              <ellipse cx="196" cy="126" rx="4" ry="2.5" fill="#ffffff" opacity="0.7"/>
+
+              <!-- Floating Glowing Book in Hands -->
+              <g transform="translate(182, 148)">
+                <path d="M 0 8 C 8 4, 16 5, 18 10 C 20 5, 28 4, 36 8 L 36 22 C 28 18, 20 19, 18 24 C 16 19, 8 18, 0 22 Z" fill="var(--bg-card)" stroke="var(--accent-primary)" stroke-width="1.8"/>
+                <line x1="18" y1="10" x2="18" y2="24" stroke="var(--accent-primary)" stroke-width="1.5"/>
+                <!-- Magic Sparkles rising from book -->
+                <path d="M 18 2 L 19 5 L 22 6 L 19 7 L 18 10 L 17 7 L 14 6 L 17 5 Z" fill="var(--accent-primary)"/>
+                <circle cx="8" cy="0" r="1.5" fill="var(--accent-mint)"/>
+                <circle cx="28" cy="1" r="1.5" fill="var(--accent-violet)"/>
+              </g>
+
+              <!-- Floating Tiny Planets & Stars -->
+              <circle cx="60" cy="130" r="10" fill="var(--bg-surface-alt)" stroke="var(--accent-violet)" stroke-width="1.5"/>
+              <ellipse cx="60" cy="130" rx="15" ry="3" stroke="var(--accent-violet)" stroke-width="1" opacity="0.6" transform="rotate(-20 60 130)"/>
+              <circle cx="340" cy="70" r="6" fill="var(--bg-surface-alt)" stroke="var(--accent-mint)" stroke-width="1.2"/>
+              <!-- Twinkling stars -->
+              <path d="M 310 140 L 311 143 L 314 144 L 311 145 L 310 148 L 309 145 L 306 144 L 309 143 Z" fill="var(--text-muted)" opacity="0.7"/>
+              <path d="M 95 60 L 96 62 L 98 63 L 96 64 L 95 66 L 94 64 L 92 63 L 94 62 Z" fill="var(--text-muted)" opacity="0.7"/>
+            </svg>
           </div>
+          <h2 class="kb-empty-title">Your Second Brain is in Deep Orbit</h2>
+          <p class="kb-empty-subtitle">Connect your Knowledge Base at the bottom of the sidebar to load your notes and graph.</p>
         </section>
 
 
@@ -863,10 +927,10 @@
   </script>
 
   <!-- KB connection layer (must run before app.js), auth, graph, then app -->
-  <script src="kb-source.js?v=11"></script>
-  <script src="auth.js?v=11"></script>
-  <script src="graph.js?v=11"></script>
-  <script src="app.js?v=11"></script>
+  <script src="kb-source.js?v=12"></script>
+  <script src="auth.js?v=12"></script>
+  <script src="graph.js?v=12"></script>
+  <script src="app.js?v=12"></script>
 </body>
 
 </html>

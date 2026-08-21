@@ -298,11 +298,13 @@
     }
     updateSourceUI();
 
-    if (!window.KB_DATA) {
-      showConnectPrompt();
+    if (!window.KB_DATA || !window.KB_DATA.notes || window.KB_DATA.notes.length === 0) {
+      document.body.classList.add('kb-empty');
+      if (el.topicTotalCount) el.topicTotalCount.textContent = '0';
+      if (el.totalNotesStat) el.totalNotesStat.textContent = '0';
       return;
     }
-    hideConnectPrompt();
+    document.body.classList.remove('kb-empty');
 
     state.notes = (window.KB_DATA.notes || []).map(n => ({
       ...n,
@@ -2844,57 +2846,36 @@ related:
         : `${readOnlyReason()} Click to change.`;
     }
 
-    // Settings Menu KB Status Button (Green / Red indicator)
-    const settingsKbBtn = document.getElementById('settingsKbConnectBtn');
-    const settingsKbText = document.getElementById('settingsKbText');
-    const settingsKbHost = document.getElementById('settingsKbHost');
-    const settingsKbDot = document.getElementById('settingsKbDot');
-    if (settingsKbBtn) {
-      const isLive = status.mode === 'live';
-      settingsKbBtn.className = `settings-kb-status-btn ${isLive ? 'status-connected' : 'status-disconnected'}`;
-      if (settingsKbText) settingsKbText.textContent = isLive ? 'KB Connected' : 'KB Not Connected';
-      if (settingsKbHost) {
-        settingsKbHost.textContent = status.baseUrl
-          ? (status.label || status.baseUrl.replace(/^https?:\/\//, ''))
-          : 'Click to configure';
-      }
-      if (settingsKbDot) {
-        settingsKbDot.className = `status-indicator-dot ${isLive ? 'is-live' : 'is-error'}`;
-      }
-    }
-
-    // Sidebar footer mirrors the same truth, worded for the "is it live?" glance.
+    // Sidebar footer status button (KB Connected / KB Not Connected)
+    const sidebarBtn = document.getElementById('sidebarKbStatusBtn');
     const footerDot = document.getElementById('footerStatusDot');
     const footerTitle = document.getElementById('footerStatusTitle');
     const footerSub = document.getElementById('footerStatusSubtitle');
-    const footerText = {
-      live: 'System Live',
-      snapshot: 'Read-Only Snapshot',
-      cache: 'Offline (Cached)',
-      '': 'Not Connected'
-    }[status.mode] || 'Not Connected';
-    if (footerTitle) footerTitle.textContent = footerText;
-    if (footerSub) {
-      footerSub.textContent = status.mode
-        ? status.label
-        : (status.lastError || 'Click to choose a knowledge base');
+    const isLive = status.mode === 'live';
+    const hasData = !!(window.KB_DATA && window.KB_DATA.notes && window.KB_DATA.notes.length > 0);
+    document.body.classList.toggle('kb-empty', !hasData);
+
+    if (sidebarBtn) {
+      sidebarBtn.className = `footer-system-status ${isLive ? 'status-connected' : 'status-disconnected'}`;
     }
-    if (footerDot) footerDot.className = `status-indicator-dot ${dotState}`;
+    if (footerTitle) {
+      footerTitle.textContent = isLive ? 'KB Connected' : 'KB Not Connected';
+    }
+    if (footerSub) {
+      footerSub.textContent = isLive
+        ? (status.label || (status.baseUrl ? status.baseUrl.replace(/^https?:\/\//, '') : 'Local Server'))
+        : 'Click to configure';
+    }
+    if (footerDot) {
+      footerDot.className = `status-indicator-dot ${isLive ? 'is-live' : 'is-error'}`;
+    }
+
+    if (el.topicTotalCount && !hasData) {
+      el.topicTotalCount.textContent = '0';
+    }
 
     document.body.classList.toggle('kb-readonly', isReadOnly());
     if (state.currentNote) renderModalTags(state.currentNote);
-  }
-
-  function showConnectPrompt() {
-    const prompt = document.getElementById('kbConnectPrompt');
-    const reason = document.getElementById('kbConnectReason');
-    const status = window.KBSource ? window.KBSource.getStatus() : null;
-    if (reason) {
-      reason.textContent = (status && status.lastError)
-        || 'No knowledge base is connected yet.';
-    }
-    if (prompt) prompt.classList.remove('hidden');
-    console.warn('[KB] No Knowledge Base data available.');
   }
 
   function hideConnectPrompt() {
