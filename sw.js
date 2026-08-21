@@ -1,13 +1,13 @@
 // Bump this whenever the precache list or any asset query string changes.
-const CACHE_NAME = 'kb-dashboard-v15';
+const CACHE_NAME = 'kb-dashboard-v16';
 const PRECACHE_URLS = [
   './',
   './index.html',
-  './styles.css?v=15',
-  './kb-source.js?v=15',
-  './auth.js?v=15',
-  './graph.js?v=15',
-  './app.js?v=15',
+  './styles.css?v=16',
+  './kb-source.js?v=16',
+  './auth.js?v=16',
+  './graph.js?v=16',
+  './app.js?v=16',
   './manifest.json',
   './icons/icon.svg',
   './icons/icon-192.png',

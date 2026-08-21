@@ -29,7 +29,7 @@
     }
   </script>
 
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 
 <body>
@@ -125,15 +125,20 @@
 
       </div>
 
-      <!-- Sidebar Footer Status — filled in by updateSourceUI() -->
+      <!-- Sidebar Footer Status & Theme Toggle -->
       <div class="sidebar-footer">
-        <button id="sidebarKbStatusBtn" class="footer-system-status status-disconnected" onclick="window.openKbSourceSettings()" title="Configure Knowledge Base Connection">
-          <span class="status-indicator-dot" id="footerStatusDot"></span>
-          <span class="status-text">
-            <span class="status-title" id="footerStatusTitle">KB Not Connected</span>
-            <span class="status-subtitle" id="footerStatusSubtitle">Click to configure</span>
-          </span>
-        </button>
+        <div class="sidebar-footer-row">
+          <button id="sidebarKbStatusBtn" class="footer-system-status status-disconnected" onclick="window.openKbSourceSettings()" title="Configure Knowledge Base Connection">
+            <span class="status-indicator-dot" id="footerStatusDot"></span>
+            <span class="status-text">
+              <span class="status-title" id="footerStatusTitle">KB Not Connected</span>
+              <span class="status-subtitle" id="footerStatusSubtitle">Click to configure</span>
+            </span>
+          </button>
+          <button id="themeToggleBtn" class="btn-sidebar-theme" onclick="window.toggleTheme()" title="Toggle Dark/Light Mode">
+            <span id="themeIcon">🌙</span>
+          </button>
+        </div>
       </div>
 
     </aside>
@@ -185,6 +190,12 @@
         <!-- Right: Actions & Settings -->
         <div class="topbar-right">
 
+          <!-- Notes Indexed Stat Badge -->
+          <div class="topbar-notes-stat" title="Total indexed notes in Second Brain">
+            <span class="chip-dot"></span>
+            <span id="totalNotesStat">0</span>&nbsp;notes
+          </div>
+
           <!-- Notification Bell & Ingestion Activity Feed -->
           <div class="notification-container">
             <button id="notifBellBtn" class="btn-action btn-notif" onclick="window.toggleNotificationPanel(event)" title="Recent Ingestions & Activity">
@@ -211,7 +222,7 @@
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
-            <span>+ Note</span>
+            <span>Note</span>
           </button>
 
           <!-- Ingest Button -->
@@ -253,23 +264,23 @@
                   <div id="settingsUserEmail" class="settings-user-email">user@gmail.com</div>
                 </div>
               </div>
-              <button id="settingsLogoutBtn" class="settings-menu-item btn-settings-logout" onclick="window.handleGoogleLogout()" title="Sign out of your account">
-                <span class="settings-item-icon">🚪</span>
-                <span>Sign Out</span>
-              </button>
 
               <div class="settings-menu-divider"></div>
 
-              <!-- Statistics & Sync Actions -->
-              <div class="settings-menu-stat">
-                <span class="chip-dot"></span>
-                <span id="totalNotesStat">—</span>&nbsp;notes indexed
-              </div>
+              <!-- Secondary Actions -->
               <button id="syncDriveBtn" class="settings-menu-item" onclick="window.triggerGoogleDriveSync()" title="Pull the latest knowledge base contents">
                 <span id="syncIconSvg">🔄</span>&nbsp;<span id="syncBtnText">Sync now</span>
               </button>
               <button id="pwaInstallBtn" class="settings-menu-item hidden" onclick="window.installPWA()" title="Install Knowledge Base Web App">
                 ⬇️ Install app
+              </button>
+
+              <div class="settings-menu-divider"></div>
+
+              <!-- Sign Out Button (Last item in menu) -->
+              <button id="settingsLogoutBtn" class="settings-menu-item btn-settings-logout" onclick="window.handleGoogleLogout()" title="Sign out of your account">
+                <span class="settings-item-icon">🚪</span>
+                <span>Sign Out</span>
               </button>
             </div>
           </div>
@@ -945,10 +956,10 @@
   </script>
 
   <!-- KB connection layer (must run before app.js), auth, graph, then app -->
-  <script src="kb-source.js?v=15"></script>
-  <script src="auth.js?v=15"></script>
-  <script src="graph.js?v=15"></script>
-  <script src="app.js?v=15"></script>
+  <script src="kb-source.js?v=16"></script>
+  <script src="auth.js?v=16"></script>
+  <script src="graph.js?v=16"></script>
+  <script src="app.js?v=16"></script>
 </body>
 
 </html>

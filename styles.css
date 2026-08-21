@@ -719,6 +719,40 @@ html, body{
   white-space: nowrap;
 }
 
+.sidebar-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.sidebar-footer-row .footer-system-status {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.btn-sidebar-theme {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-sidebar-theme:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+  transform: scale(1.05);
+}
+
 .footer-system-status{
   display: flex;
   align-items: center;
@@ -1042,8 +1076,9 @@ html, body{
   border-color: var(--border-hover);
 }
 
-.topbar-chip{
-  display: flex;
+.topbar-notes-stat,
+.topbar-chip {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
@@ -1052,7 +1087,8 @@ html, body{
   border-radius: var(--radius-pill);
   background: var(--bg-surface-alt);
   border: 1px solid var(--border-card);
-  color: var(--text-primary);
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .chip-dot{
@@ -2996,11 +3032,15 @@ mark {
 }
 
 .btn-settings-logout {
-  color: var(--accent-danger);
+  color: var(--accent-danger, #ef4444) !important;
+  font-weight: 700 !important;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
 }
 
 .btn-settings-logout:hover {
-  background: var(--accent-danger-glow);
+  background: var(--accent-danger-glow, rgba(239, 68, 68, 0.14)) !important;
+  color: var(--accent-danger-soft, #f87171) !important;
 }
 
 .settings-menu-stat {
