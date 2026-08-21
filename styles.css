@@ -55,6 +55,24 @@
 
   --accent-danger: #ef4444;
   --accent-danger-soft: #f87171;
+  --accent-danger-deep: #dc2626;
+  --accent-danger-glow: rgba(239, 68, 68, 0.14);
+  --accent-danger-border: rgba(239, 68, 68, 0.35);
+
+  --accent-info: #0ea5e9;
+  --accent-info-glow: rgba(14, 165, 233, 0.15);
+
+  /* Text-on-glow accents — readable when painted over an *-glow fill. */
+  --accent-violet-text: #a78bfa;
+  --accent-info-text: #38bdf8;
+  --accent-mint-text: #34d399;
+
+  /* Deep mint stops for the New Note gradient. */
+  --accent-mint-deep: #059669;
+  --accent-mint-deeper: #047857;
+
+  /* Ripple tint — light ink on dark surfaces, dark ink on light ones. */
+  --ripple-tint: rgba(255, 255, 255, 0.25);
 
   /* Code, highlight & overlays */
   --bg-code: #05070a;
@@ -195,6 +213,21 @@
 
   --accent-danger: #b91c1c;
   --accent-danger-soft: #dc2626;
+  --accent-danger-deep: #991b1b;
+  --accent-danger-glow: rgba(185, 28, 28, 0.1);
+  --accent-danger-border: rgba(185, 28, 28, 0.28);
+
+  --accent-info: #0369a1;
+  --accent-info-glow: rgba(3, 105, 161, 0.12);
+
+  --accent-violet-text: #5b21b6;
+  --accent-info-text: #075985;
+  --accent-mint-text: #3f6330;
+
+  --accent-mint-deep: #3f6330;
+  --accent-mint-deeper: #2f4a24;
+
+  --ripple-tint: rgba(15, 15, 15, 0.12);
 
   --bg-code: #f1efe6;
   --text-code: #1d4ed8;
@@ -331,8 +364,11 @@ html, body{
   margin-left: auto;
 }
 
+/* min-height:0 is required: without it the flex item refuses to shrink below its
+   content height and pushes the footer out of the viewport. */
 .sidebar-scrollable{
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: 18px 16px;
   display: flex;
@@ -667,24 +703,66 @@ html, body{
 
 /* Sidebar Footer */
 .sidebar-footer {
+  flex: 0 0 auto;
   padding: 14px 18px;
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-sidebar);
+}
+
+.status-text{
+  min-width: 0;
+}
+
+.status-subtitle{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .footer-system-status{
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.status-title, .status-subtitle{
+  display: block;
 }
 
 .status-indicator-dot{
+  flex: 0 0 auto;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--accent-primary);
   box-shadow: 0 0 10px var(--accent-primary);
   animation: pulse-dot 2s infinite ease-in-out;
+}
+
+.status-indicator-dot.is-live{
+  background: var(--accent-mint);
+  box-shadow: 0 0 10px var(--accent-mint);
+}
+
+.status-indicator-dot.is-readonly{
+  background: var(--accent-amber);
+  box-shadow: 0 0 10px var(--accent-amber-glow);
+  animation: none;
+}
+
+.status-indicator-dot.is-offline,
+.status-indicator-dot.is-error{
+  background: var(--accent-danger);
+  box-shadow: 0 0 10px var(--accent-danger);
+  animation: none;
 }
 
 @keyframes pulse-dot {
@@ -767,9 +845,11 @@ html, body{
   color: var(--text-primary);
 }
 
-/* Center Search Container */
+/* Center Search Container — allowed to shrink so the action buttons on the right
+   never wrap onto a second row on medium widths. */
 .topbar-center {
-  flex: 1;
+  flex: 1 1 240px;
+  min-width: 0;
   max-width: 620px;
 }
 
@@ -868,8 +948,9 @@ html, body{
 .topbar-right {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   gap: 10px;
-  min-width: 220px;
   justify-content: flex-end;
 }
 
@@ -1052,12 +1133,19 @@ html, body{
   padding: 10px 14px;
 }
 
+/* Horizontal scroller. The padding is not decoration: without it the active
+   pill's focus ring and drop shadow get clipped by the overflow box. */
 .topic-pills-scroller{
   display: flex;
   align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
   gap: 6px;
+  padding: 4px 2px;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
+  scroll-padding-inline: 8px;
 }
 
 .topic-pills-scroller::-webkit-scrollbar{
@@ -1065,6 +1153,9 @@ html, body{
 }
 
 .sh-nav-tab{
+  /* No shrinking: the scroller scrolls. Shrinking clipped every label down to
+     two characters as soon as the ribbon ran out of room. */
+  flex-shrink: 0;
   padding: 6px 14px;
   border-radius: var(--radius-pill);
   font-size: 12.5px;
@@ -1517,14 +1608,47 @@ mark {
   position: absolute;
   top: 20px;
   left: 20px;
+  z-index: 2;
   background: var(--overlay-panel);
   backdrop-filter: blur(8px);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
-  padding: 12px 14px;
-  max-width: 260px;
-  max-height: 240px;
+  box-shadow: var(--shadow-card);
+  padding: 10px 12px;
+  width: 220px;
+  max-width: calc(100% - 40px);
+  /* The renderer already caps the list (LEGEND_LIMIT + a "+N more" line), so the
+     box is sized to show all of it. A px max-height sliced the last visible row
+     in half, which read as a rendering bug rather than as "there is more below".
+     The 100% cap is only a safety valve for very short containers. */
+  --legend-row: 22px;
+  max-height: calc(100% - 40px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.graph-legend-box:empty{
+  display: none;
+}
+
+.graph-legend-title{
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  line-height: 14px;
+  margin-bottom: 6px;
+}
+
+.graph-legend-more{
+  box-sizing: border-box;
+  height: var(--legend-row, 22px);
+  font-size: 10.5px;
+  line-height: 17px;
+  color: var(--text-muted);
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .graph-detail-popup{
@@ -1892,8 +2016,12 @@ mark {
 /* ==========================================================================
    Utility
    ========================================================================== */
+/* Visibility utility. !important because component rules further down the file
+   declare their own `display` at the same specificity and would otherwise win
+   on source order — which silently un-hid the connect prompt, the notification
+   badge and the signed-in profile chip. */
 .hidden{
-  display: none;
+  display: none !important;
 }
 
 /* ==========================================================================
@@ -2008,14 +2136,35 @@ mark {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 0;
+  height: var(--legend-row, 22px);
   font-size: 11.5px;
   color: var(--text-secondary);
   cursor: pointer;
+  min-width: 0;
 }
 
 .sh-graph-legend-item:hover{
   color: var(--text-primary);
+}
+
+.sh-graph-legend-item.active{
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* One line per topic: the name truncates, the count never gets pushed out. */
+.legend-label{
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legend-count{
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
 }
 
 .legend-dot{
@@ -2334,46 +2483,8 @@ mark {
     display: block;
   }
 
-  .app-topbar{
-    padding: 0 16px;
-  }
-
-  .app-body{
-    padding: 16px;
-  }
-
-  .sh-data-table .col-type,
-  .sh-data-table .col-updated{
-    display: none;
-  }
-
-  .graph-legend-box{
-    max-width: 200px;
-    max-height: 160px;
-  }
-
-  .graph-detail-popup{
-    max-width: calc(100% - 40px);
-  }
-
-  .modal-header, .modal-body, .modal-footer{
-    padding-left: 18px;
-    padding-right: 18px;
-  }
-}
-
-@media (max-width: 640px) {
-  .app-body{
-    padding: 12px;
-    gap: 16px;
-  }
-
-  .search-scope-wrapper, .search-divider, .search-badge-kbd{
-    display: none;
-  }
-
-  /* Breadcrumb, search box and action buttons stop fitting on one line — give
-     the search a row of its own rather than letting the buttons get crushed. */
+  /* At this width the breadcrumb, search box and action buttons stop fitting on
+     one line and start overlapping — give the search a row of its own. */
   .app-topbar{
     height: auto;
     flex-wrap: wrap;
@@ -2402,6 +2513,39 @@ mark {
   }
 
   .topbar-chip{
+    display: none;
+  }
+
+  .app-body{
+    padding: 16px;
+  }
+
+  .sh-data-table .col-type,
+  .sh-data-table .col-updated{
+    display: none;
+  }
+
+  .graph-legend-box{
+    width: 180px;
+  }
+
+  .graph-detail-popup{
+    max-width: calc(100% - 40px);
+  }
+
+  .modal-header, .modal-body, .modal-footer{
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-body{
+    padding: 12px;
+    gap: 16px;
+  }
+
+  .search-scope-wrapper, .search-divider, .search-badge-kbd{
     display: none;
   }
 
@@ -2449,6 +2593,30 @@ mark {
   .metric-value{
     font-size: 24px;
   }
+
+  /* Graph overlays on a phone: the legend gives back canvas space and the
+     detail card sits above the toolbar instead of behind it. */
+  .graph-legend-box{
+    top: 12px;
+    left: 12px;
+    width: 148px;
+    --legend-row: 20px;
+    max-height: calc(100% - 24px);
+    padding: 8px 10px;
+  }
+
+  .graph-detail-popup{
+    left: 12px;
+    right: 12px;
+    bottom: 68px;
+    max-width: none;
+    padding: 12px;
+  }
+
+  .graph-floating-toolbar{
+    bottom: 12px;
+    right: 12px;
+  }
 }
 
 @media (max-width: 540px) {
@@ -2456,20 +2624,23 @@ mark {
     gap: 5px;
   }
 
-  .btn-sync span,
-  .btn-install span,
-  .btn-ingest span {
+  .btn-ingest span,
+  .btn-new-note span {
     display: none;
   }
 
-  .btn-sync,
-  .btn-install,
-  .btn-ingest {
+  .btn-ingest,
+  .btn-new-note {
     padding: 6px 9px;
   }
 
-  .guest-mode-pill span {
-    font-size: 10.5px;
+  /* The URL is long and the dot already carries the status — drop the text. */
+  .kb-source-label {
+    display: none;
+  }
+
+  .kb-source-pill {
+    padding: 6px 9px;
   }
 
   .notif-dropdown {
@@ -2502,11 +2673,6 @@ mark {
     display: none;
   }
 
-  .guest-mode-pill {
-    padding: 3px 6px;
-    font-size: 10px;
-  }
-
   .user-name {
     display: none;
   }
@@ -2521,39 +2687,11 @@ mark {
 }
 
 /* ==========================================================================
-   Google Drive Sync, PWA Install & Google Auth Styles
+   Google Auth Styles
    ========================================================================== */
-.btn-sync {
-  background: rgba(14, 165, 233, 0.12);
-  color: #0ea5e9;
-  border: 1px solid rgba(14, 165, 233, 0.3);
-}
-
-.btn-sync:hover {
-  background: rgba(14, 165, 233, 0.22);
-  border-color: #0ea5e9;
-  color: #38bdf8;
-}
-
-.btn-sync.syncing #syncIconSvg {
-  animation: spin 1s linear infinite;
-}
-
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-.btn-install {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-.btn-install:hover {
-  background: rgba(16, 185, 129, 0.22);
-  border-color: #10b981;
-  color: #34d399;
 }
 
 /* User Auth Container */
@@ -2626,7 +2764,7 @@ mark {
   background: var(--bg-card);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-md);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-modal);
   padding: 8px;
   min-width: 190px;
   z-index: 1000;
@@ -2663,7 +2801,7 @@ mark {
   background: transparent;
   border: none;
   padding: 7px 8px;
-  color: #ef4444;
+  color: var(--accent-danger);
   font-size: 12px;
   font-weight: 600;
   border-radius: var(--radius-sm);
@@ -2672,7 +2810,7 @@ mark {
 }
 
 .user-menu-item:hover {
-  background: rgba(239, 68, 68, 0.12);
+  background: var(--accent-danger-glow);
 }
 
 /* Card Performance Boosts */
@@ -2711,8 +2849,8 @@ mark {
   position: absolute;
   top: -4px;
   right: -4px;
-  background: #ef4444;
-  color: #fff;
+  background: var(--accent-danger);
+  color: var(--text-on-accent);
   font-size: 10px;
   font-weight: 700;
   min-width: 17px;
@@ -2722,8 +2860,8 @@ mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--bg-surface);
-  box-shadow: 0 2px 5px rgba(239, 68, 68, 0.4);
+  border: 2px solid var(--bg-topbar);
+  box-shadow: 0 2px 5px var(--accent-danger-glow);
 }
 
 .notif-dropdown {
@@ -2735,7 +2873,7 @@ mark {
   background: var(--bg-card);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-modal);
   z-index: 1000;
   backdrop-filter: blur(20px);
   overflow: hidden;
@@ -2809,18 +2947,18 @@ mark {
   text-transform: uppercase;
   padding: 2px 6px;
   border-radius: var(--radius-pill);
-  background: rgba(139, 92, 246, 0.15);
-  color: #a78bfa;
+  background: var(--accent-violet-glow);
+  color: var(--accent-violet-text);
 }
 
 .notif-item-badge.badge-newsletter {
-  background: rgba(14, 165, 233, 0.15);
-  color: #38bdf8;
+  background: var(--accent-info-glow);
+  color: var(--accent-info-text);
 }
 
 .notif-item-badge.badge-sync {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
+  background: var(--accent-mint-glow);
+  color: var(--accent-mint-text);
 }
 
 .notif-item-time {
@@ -2854,29 +2992,205 @@ mark {
 }
 
 /* ==========================================================================
-   Guest Mode Badges & Restricted States
+   Knowledge Base Connection: status pill, read-only state, connect prompt
    ========================================================================== */
-.guest-mode-pill {
+/* The pill is the single place the user learns which KB they are looking at and
+   whether it can be written to. Colour comes from the mode, not from auth. */
+.kb-source-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  gap: 7px;
+  max-width: 230px;
+  padding: 6px 12px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-card);
   border-radius: var(--radius-pill);
-  font-size: 11.5px;
-  font-weight: 600;
-  color: #f59e0b;
-  user-select: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.guest-locked {
-  opacity: 0.6;
-  cursor: not-allowed !important;
-  position: relative;
+.kb-source-pill:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
 }
 
-.guest-hidden {
+.kb-source-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-source-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.kb-source-dot.is-live {
+  background: var(--accent-mint);
+  box-shadow: 0 0 7px var(--accent-mint);
+}
+
+.kb-source-dot.is-readonly {
+  background: var(--accent-amber);
+  box-shadow: 0 0 7px var(--accent-amber-glow);
+}
+
+.kb-source-dot.is-offline,
+.kb-source-dot.is-error {
+  background: var(--accent-danger);
+  box-shadow: 0 0 7px var(--accent-danger);
+}
+
+/* Read-only knowledge base: hide what cannot work, dim what only partly works. */
+body.kb-readonly .btn-ingest,
+body.kb-readonly #openNewNoteBtn,
+body.kb-readonly #deleteTopicBtn,
+body.kb-readonly #modalEditFooterBtn,
+body.kb-readonly #modalDeleteFooterBtn,
+body.kb-readonly #modalRenameFooterBtn,
+body.kb-readonly #syncDriveBtn {
   display: none !important;
+}
+
+.readonly-note {
+  padding: 10px 14px;
+  border: 1px dashed var(--accent-amber-border);
+  border-radius: var(--radius-md);
+  background: var(--accent-amber-glow);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* Shown instead of the note grid when there is no reachable KB at all. */
+.kb-connect-prompt {
+  display: flex;
+  justify-content: center;
+  padding: 48px 16px;
+}
+
+.kb-connect-card {
+  max-width: 520px;
+  padding: 32px;
+  text-align: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+}
+
+.kb-connect-icon {
+  font-size: 34px;
+  margin-bottom: 10px;
+}
+
+.kb-connect-card h2 {
+  font-size: 19px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.kb-connect-card p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+
+.kb-connect-hint {
+  margin: 18px 0 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.kb-connect-hint code {
+  font-family: var(--font-mono);
+  background: var(--bg-code);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   Topbar Overflow ("More") Menu
+   ========================================================================== */
+.topbar-more {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.btn-more {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-card);
+  color: var(--text-primary);
+  padding: 7px 9px;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn-more:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
+.topbar-more-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 240px;
+  padding: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+  z-index: 1000;
+}
+
+.more-menu-stat {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.more-menu-divider {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--border-subtle);
+}
+
+.more-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.more-menu-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.more-menu-item.syncing #syncIconSvg {
+  display: inline-block;
+  animation: spin 1s linear infinite;
 }
 
 /* ==========================================================================
@@ -2918,7 +3232,7 @@ mark {
 .md-ripple-effect {
   position: absolute;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--ripple-tint);
   transform: scale(0);
   pointer-events: none;
   animation: md-ripple-anim 0.55s var(--md-motion-decelerate);
@@ -2995,8 +3309,8 @@ mark {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: var(--accent-danger-glow);
+  border: 1px solid var(--accent-danger-border);
   color: var(--accent-danger-soft);
   padding: 6px 14px;
   border-radius: var(--radius-pill);
@@ -3008,14 +3322,14 @@ mark {
 
 .btn-topic-delete:hover {
   background: var(--accent-danger);
-  color: #ffffff;
+  color: var(--text-on-accent);
   border-color: var(--accent-danger);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  box-shadow: 0 4px 12px var(--accent-danger-glow);
 }
 
 .btn-modal-danger {
   background: var(--accent-danger);
-  color: #ffffff;
+  color: var(--text-on-accent);
   border: none;
   padding: 8px 18px;
   border-radius: var(--radius-pill);
@@ -3026,17 +3340,17 @@ mark {
 }
 
 .btn-modal-danger:hover {
-  background: #dc2626;
-  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+  background: var(--accent-danger-deep);
+  box-shadow: 0 4px 14px var(--accent-danger-glow);
 }
 
 .btn-modal-action-danger {
   color: var(--accent-danger-soft);
-  border-color: rgba(239, 68, 68, 0.35);
+  border-color: var(--accent-danger-border);
 }
 
 .btn-modal-action-danger:hover {
-  background: rgba(239, 68, 68, 0.15);
+  background: var(--accent-danger-glow);
   color: var(--accent-danger);
   border-color: var(--accent-danger);
 }
@@ -3056,14 +3370,14 @@ mark {
 }
 
 .sh-card-delete-btn:hover {
-  background: rgba(239, 68, 68, 0.15);
+  background: var(--accent-danger-glow);
   color: var(--accent-danger);
-  border-color: rgba(239, 68, 68, 0.4);
+  border-color: var(--accent-danger-border);
 }
 
 .btn-row-delete {
   background: transparent;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid var(--accent-danger-border);
   color: var(--accent-danger-soft);
   border-radius: var(--radius-pill);
   padding: 3px 10px;
@@ -3076,7 +3390,7 @@ mark {
 
 .btn-row-delete:hover {
   background: var(--accent-danger);
-  color: #ffffff;
+  color: var(--text-on-accent);
 }
 
 .nav-topic-row {
@@ -3116,7 +3430,7 @@ mark {
 
 .topic-delete-icon-btn:hover {
   color: var(--accent-danger);
-  background: rgba(239, 68, 68, 0.15);
+  background: var(--accent-danger-glow);
 }
 
 .modal-window-confirm {
@@ -3144,19 +3458,19 @@ mark {
    Quick Note Button & Modal
    ========================================================================== */
 .btn-new-note {
-  background: linear-gradient(135deg, #10b981, #059669);
-  color: #ffffff;
-  border: 1px solid rgba(16, 185, 129, 0.4);
+  background: linear-gradient(135deg, var(--accent-mint), var(--accent-mint-deep));
+  color: var(--text-on-accent);
+  border: 1px solid var(--accent-mint-border);
   font-weight: 700;
   display: flex;
   align-items: center;
   gap: 5px;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+  box-shadow: 0 2px 8px var(--accent-mint-glow);
 }
 
 .btn-new-note:hover {
-  background: linear-gradient(135deg, #059669, #047857);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+  background: linear-gradient(135deg, var(--accent-mint-deep), var(--accent-mint-deeper));
+  box-shadow: 0 4px 12px var(--accent-mint-glow);
 }
 
 .modal-window-quicknote {
@@ -3370,11 +3684,257 @@ mark {
 }
 
 .search-mode-pill.active {
-  background: rgba(139, 92, 246, 0.15);
-  border-color: rgba(139, 92, 246, 0.4);
+  background: var(--accent-violet-glow);
+  border-color: var(--accent-violet-border);
   color: var(--accent-primary);
 }
 
 
 
 
+
+/* ==========================================================================
+   Knowledge Base Connection Dialog (injected by kb-source.js)
+   ========================================================================== */
+.kbsource-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--overlay-backdrop);
+  backdrop-filter: blur(6px);
+}
+
+.kbsource-overlay[hidden] {
+  display: none;
+}
+
+.kbsource-modal {
+  width: min(520px, 100%);
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+}
+
+.kbsource-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.kbsource-head h2 {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.kbsource-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.kbsource-close:hover {
+  color: var(--text-primary);
+}
+
+.kbsource-body {
+  padding: 20px 22px;
+}
+
+.kbsource-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.kbsource-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  outline: none;
+}
+
+.kbsource-input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-glow);
+}
+
+.kbsource-hint {
+  margin-top: 8px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+.kbsource-hint code {
+  font-family: var(--font-mono);
+  background: var(--bg-code);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.kbsource-result {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  line-height: 1.55;
+  border: 1px solid var(--border-card);
+  background: var(--bg-surface-alt);
+  color: var(--text-secondary);
+}
+
+.kbsource-result.kbsource-ok {
+  border-color: var(--accent-mint-border);
+  background: var(--accent-mint-glow);
+  color: var(--accent-mint);
+}
+
+.kbsource-result.kbsource-error {
+  border-color: var(--accent-danger);
+  background: var(--accent-amber-glow);
+  color: var(--accent-danger);
+}
+
+.kbsource-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.kbsource-when {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.kbsource-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.kbsource-dot-live { background: var(--accent-mint); }
+.kbsource-dot-snapshot { background: var(--accent-amber); }
+.kbsource-dot-cache,
+.kbsource-dot-none { background: var(--accent-danger); }
+
+.kbsource-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface-alt);
+}
+
+.kbsource-spacer {
+  flex: 1;
+}
+
+.kbsource-btn {
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--border-card);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  transition: all 0.15s ease;
+}
+
+.kbsource-btn:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
+}
+
+.kbsource-btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.kbsource-btn-primary {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: var(--text-on-accent);
+}
+
+.kbsource-btn-primary:hover:not(:disabled) {
+  background: var(--accent-primary-deep);
+  border-color: var(--accent-primary-deep);
+  color: var(--text-on-accent);
+}
+
+body.kbsource-open {
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   Rename Note Modal
+   ========================================================================== */
+.rename-file-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.rename-path-preview {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.9;
+  word-break: break-all;
+}
+
+.rename-path-label {
+  display: inline-block;
+  min-width: 34px;
+  font-family: var(--font-main);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.rename-path-preview .is-unchanged {
+  color: var(--text-muted);
+}
+
+.rename-note-hint {
+  margin-top: 12px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}

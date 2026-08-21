@@ -1,13 +1,17 @@
-const CACHE_NAME = 'kb-dashboard-v8';
+// Bump this whenever the precache list or any asset query string changes.
+const CACHE_NAME = 'kb-dashboard-v10';
 const PRECACHE_URLS = [
   './',
   './index.html',
-  './styles.css?v=8',
-  './app.js?v=8',
-  './data.js?v=8',
-  './graph.js?v=8',
+  './styles.css?v=10',
+  './kb-source.js?v=10',
+  './auth.js?v=10',
+  './graph.js?v=10',
+  './app.js?v=10',
   './manifest.json',
-  './knowledgebase.svg'
+  './icons/icon.svg',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -38,10 +42,10 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  // Always fetch live for API calls
-  if (url.pathname.includes('/api/')) {
-    return;
-  }
+  // Knowledge base traffic is never the service worker's business: it lives on a
+  // different origin (Tailscale host) and KBSource does its own IndexedDB caching.
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.includes('/api/') || url.pathname.endsWith('/kb.json')) return;
 
   // Network-first with cache fallback
   event.respondWith(

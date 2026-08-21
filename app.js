@@ -93,7 +93,21 @@
     return null;
   }
 
+  // All server traffic goes through KBSource, which knows which knowledge base is
+  // connected and prefixes the configured base URL. These wrappers keep the rest of
+  // the app free of that concern, and degrade to same-origin if the layer is absent.
+  function apiFetch(path, options) {
+    if (window.KBSource) return window.KBSource.fetch(path, options);
+    return fetch(path, options);
+  }
+
   function postJson(url, body) {
+    if (window.KBSource) {
+      return window.KBSource.post(url, body).then(data => {
+        if (!data || !data.success) throw new Error((data && data.error) || 'Request failed');
+        return data;
+      });
+    }
     return fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -104,6 +118,27 @@
         if (!data || !data.success) throw new Error((data && data.error) || 'Request failed');
         return data;
       });
+  }
+
+  /** True when the connected knowledge base accepts writes. */
+  function isReadOnly() {
+    return !!(window.KBSource && window.KBSource.getStatus().mode !== 'live');
+  }
+
+  function readOnlyReason() {
+    const status = window.KBSource ? window.KBSource.getStatus() : null;
+    if (!status) return 'This knowledge base is read-only.';
+    if (status.mode === 'cache') return 'Offline — showing a cached copy. Reconnect to the knowledge base server to make changes.';
+    if (status.mode === 'snapshot') return 'This knowledge base is a static snapshot. Connect to a knowledge base server to make changes.';
+    if (!status.mode) return 'No knowledge base connected.';
+    return 'This knowledge base is read-only.';
+  }
+
+  /** Blocks a mutation when the source cannot accept writes. Returns true if blocked. */
+  function blockIfReadOnly() {
+    if (!isReadOnly()) return false;
+    if (window.showToast) window.showToast(readOnlyReason(), 4500);
+    return true;
   }
 
   function init() {
@@ -224,6 +259,14 @@
     if (el.themeIcon) el.themeIcon.textContent = theme === 'dark' ? '🌙' : '☀️';
     if (el.themeLabel) el.themeLabel.textContent = theme === 'dark' ? 'Dark' : 'Light';
     localStorage.setItem('sh_kb_theme', theme);
+    // The PWA chrome (status bar / title bar) is painted from this meta tag, so
+    // it has to follow the theme or the installed app keeps a dark bar in light mode.
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) {
+      const appBg = getComputedStyle(document.documentElement)
+        .getPropertyValue('--bg-topbar').trim();
+      if (appBg) themeMeta.setAttribute('content', appBg);
+    }
     // Each theme declares its own taxonomy and canvas colours, so every value
     // resolved from CSS has to be dropped and read again.
     topicColorCache.clear();
@@ -244,18 +287,22 @@
   let deepLinkApplied = false;
 
   async function loadData() {
-    if (!window.KB_DATA) {
-      try {
-        const res = await fetch('./api/notes');
-        if (res.ok) {
-          window.KB_DATA = await res.json();
+    if (!window.KB_DATA && window.KBSource) {
+      const result = await window.KBSource.loadPayload();
+      if (result.payload) {
+        window.KB_DATA = result.payload;
+        if (result.offline && window.showToast) {
+          window.showToast('Offline — showing the last cached copy of this knowledge base.', 5000);
         }
-      } catch (e) {}
+      }
     }
+    updateSourceUI();
+
     if (!window.KB_DATA) {
-      console.warn('[KB] No Knowledge Base data available.');
+      showConnectPrompt();
       return;
     }
+    hideConnectPrompt();
 
     state.notes = (window.KB_DATA.notes || []).map(n => ({
       ...n,
@@ -563,19 +610,35 @@
       el.topicScopeSelect.value = state.selectedTopic;
     }
 
-    // Dynamic Graph Legend
+    // Dynamic Graph Legend — the 8 biggest topics, then an explicit count of
+    // what was left out so the legend never silently under-reports the graph.
     const graphLegend = document.getElementById('graphLegend');
     if (graphLegend) {
-      graphLegend.innerHTML = state.topics.slice(0, 8).map(t => {
+      const LEGEND_LIMIT = 8;
+      const ranked = state.topics
+        .slice()
+        .sort((a, b) => (topicCounts[b] || 0) - (topicCounts[a] || 0));
+      const shown = ranked.slice(0, LEGEND_LIMIT);
+      const hidden = ranked.length - shown.length;
+
+      const itemsHtml = shown.map(t => {
         const sample = state.notes.find(n => n.topic === t);
         const col = topicColor(sample && sample.domain);
         const count = topicCounts[t] || 0;
+        const active = state.selectedTopic === t ? ' active' : '';
         return `
-          <div class="sh-graph-legend-item" onclick="window.selectTopic('${escapeHtml(t)}')" style="--topic-accent:${col};">
-            <span class="legend-dot"></span> ${escapeHtml(t)} (${count})
+          <div class="sh-graph-legend-item${active}" onclick="window.selectTopic('${escapeHtml(t)}')" style="--topic-accent:${col};" title="${escapeHtml(t)} — ${count} notes">
+            <span class="legend-dot"></span>
+            <span class="legend-label">${escapeHtml(t)}</span>
+            <span class="legend-count">${count}</span>
           </div>
         `;
       }).join('');
+
+      graphLegend.innerHTML = shown.length
+        ? `<div class="graph-legend-title">Topics</div>${itemsHtml}` +
+          (hidden > 0 ? `<div class="graph-legend-more">+${hidden} more not shown</div>` : '')
+        : '';
     }
 
     // 2. Type Facets
@@ -697,6 +760,7 @@
     el.graphDetailsCard.classList.add('active');
   }
 
+  function bindEvents() {
     // Search input (instant debounced)
     let searchTimer = null;
     if (el.searchInput) {
@@ -734,13 +798,36 @@
       });
     }
 
+    // Rename dialog: live filename preview, Enter submits
+    const renameTitleInput = document.getElementById('renameNoteTitle');
+    const renameToggle = document.getElementById('renameNoteFileToggle');
+    if (renameTitleInput) {
+      renameTitleInput.addEventListener('input', updateRenamePreview);
+      renameTitleInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          window.submitRenameNote();
+        }
+      });
+    }
+    if (renameToggle) renameToggle.addEventListener('change', updateRenamePreview);
+
+    const renameBackdrop = document.getElementById('renameNoteModal');
+    if (renameBackdrop) {
+      renameBackdrop.addEventListener('click', (e) => {
+        if (e.target === renameBackdrop) window.closeRenameNoteModal();
+      });
+    }
+
     // Keyboard shortcut: '/' focuses search, 'Escape' closes modal/search
     window.addEventListener('keydown', (e) => {
       if (e.key === '/' && document.activeElement !== el.searchInput && !document.activeElement.matches('input, textarea') && !state.currentNote && !isShareModalOpen() && !isConfirmModalOpen() && !isQuickNoteModalOpen()) {
         e.preventDefault();
         el.searchInput.focus();
       } else if (e.key === 'Escape') {
-        if (isConfirmModalOpen()) {
+        if (isRenameModalOpen()) {
+          window.closeRenameNoteModal();
+        } else if (isConfirmModalOpen()) {
           window.closeConfirmModal();
         } else if (isQuickNoteModalOpen()) {
           window.closeQuickNoteModal();
@@ -1257,7 +1344,7 @@
       el.modalBody.innerHTML = `
         <div id="modalCategoryMovePanel"></div>
         <div class="sh-markdown-content">
-          ${renderMarkdown(note.bodyContent)}
+          ${renderMarkdown(note.body)}
         </div>
       `;
     }
@@ -1290,16 +1377,12 @@
   // Tag Editor Rendering & Management
   // =========================================================================
 
-  function isGuestMode() {
-    return !window.CURRENT_USER;
-  }
-
   function renderModalTags(note) {
     if (!el.modalTagEditor) return;
-    const isGuest = isGuestMode();
+    const readOnly = isReadOnly();
     const tags = note.tags || [];
-    
-    if (isGuest) {
+
+    if (readOnly) {
       const tagsHtml = tags.map(tg => `
         <span class="sh-tag-edit-pill">
           #${escapeHtml(tg)}
@@ -1308,7 +1391,7 @@
       el.modalTagEditor.innerHTML = `
         <span class="sh-tag-editor-label">Tags:</span>
         ${tagsHtml || '<span style="color:var(--text-muted); font-size:12px;">No tags</span>'}
-        <span style="font-size:11px; color:var(--text-muted); margin-left:6px;">🔒 (Sign in to edit tags)</span>
+        <span style="font-size:11px; color:var(--text-muted); margin-left:6px;">Read-only</span>
       `;
       return;
     }
@@ -1458,9 +1541,8 @@
     if (el.modalViewFooter) el.modalViewFooter.classList.toggle('hidden', mode !== 'view');
 
     if (mode === 'edit') {
-      if (isGuestMode()) {
-        window.showToast('🔒 Editing notes requires signing in. Please sign in with Google.', 3500);
-        window.handleGoogleLogin();
+      if (isReadOnly()) {
+        window.showToast(readOnlyReason(), 4500);
         window.switchNoteModalMode('view');
         return;
       }
@@ -1468,7 +1550,7 @@
       if (el.noteEditSummary) el.noteEditSummary.value = state.currentNote.summary || '';
       if (el.noteEditType) el.noteEditType.value = state.currentNote.type || 'concept';
       if (el.noteEditContent) {
-        el.noteEditContent.value = state.currentNote.bodyContent || '';
+        el.noteEditContent.value = state.currentNote.body || '';
         updateEditorWordCount();
       }
     } else if (mode === 'history') {
@@ -1485,15 +1567,12 @@
 
   window.saveCurrentNoteEdits = async function () {
     if (!state.currentNote) return;
-    if (isGuestMode()) {
-      window.showToast('🔒 Please sign in with Google to save note changes.', 3500);
-      return;
-    }
+    if (blockIfReadOnly()) return;
 
     const title = el.noteEditTitle ? el.noteEditTitle.value.trim() : state.currentNote.title;
     const summary = el.noteEditSummary ? el.noteEditSummary.value.trim() : state.currentNote.summary;
     const docType = el.noteEditType ? el.noteEditType.value : state.currentNote.type;
-    const content = el.noteEditContent ? el.noteEditContent.value : state.currentNote.bodyContent;
+    const content = el.noteEditContent ? el.noteEditContent.value : state.currentNote.body;
 
     if (!title) {
       window.showToast('⚠️ Note Title cannot be empty.', 2500);
@@ -1537,7 +1616,7 @@
     if (el.historyDiffViewer) el.historyDiffViewer.textContent = 'Select a commit revision above to view diff / content.';
 
     try {
-      const res = await fetch(`./api/note-history?relPath=${encodeURIComponent(relPath)}`);
+      const res = await apiFetch(`./api/note-history?relPath=${encodeURIComponent(relPath)}`);
       if (!res.ok) throw new Error('Failed to load history');
       const data = await res.json();
       const commits = data.commits || [];
@@ -1578,7 +1657,7 @@
     el.historyDiffViewer.textContent = '⏳ Loading revision content...';
 
     try {
-      const res = await fetch(`./api/note-diff?relPath=${encodeURIComponent(state.currentNote.relPath)}&commit=${encodeURIComponent(commitHash)}`);
+      const res = await apiFetch(`./api/note-diff?relPath=${encodeURIComponent(state.currentNote.relPath)}&commit=${encodeURIComponent(commitHash)}`);
       if (!res.ok) throw new Error('Could not fetch revision');
       const data = await res.json();
       el.historyDiffViewer.textContent = data.content || 'No content found for this revision.';
@@ -1592,11 +1671,7 @@
   // =========================================================================
 
   window.openQuickNoteModal = function () {
-    if (isGuestMode()) {
-      window.showToast('🔒 Creating notes requires signing in. Please sign in with Google.', 3500);
-      window.handleGoogleLogin();
-      return;
-    }
+    if (blockIfReadOnly()) return;
 
     if (el.quickNoteCategory) {
       el.quickNoteCategory.innerHTML = categoryOptionsHtml(state.selectedCategory !== 'all' ? state.selectedCategory : state.defaultCategory);
@@ -1686,10 +1761,7 @@
   };
 
   window.submitQuickNote = async function () {
-    if (isGuestMode()) {
-      window.showToast('🔒 Please sign in with Google to create notes.', 3500);
-      return;
-    }
+    if (blockIfReadOnly()) return;
 
     const title = el.quickNoteTitle ? el.quickNoteTitle.value.trim() : '';
     const category = el.quickNoteCategory ? el.quickNoteCategory.value : state.defaultCategory;
@@ -1775,7 +1847,7 @@
 
   window.reloadKnowledgeData = async function (callback) {
     try {
-      const res = await fetch('./api/notes');
+      const res = await apiFetch('./api/notes');
       if (res.ok) {
         window.KB_DATA = await res.json();
         loadData();
@@ -1789,17 +1861,134 @@
     }
   };
 
+  /* ==========================================================================
+     Rename Note — retitles the note and the file backing it
+     ========================================================================== */
+
+  function isRenameModalOpen() {
+    const modal = document.getElementById('renameNoteModal');
+    return !!(modal && modal.classList.contains('active'));
+  }
+
+  /** Mirrors the server's slug rule so the preview matches what lands on disk. */
+  function slugifyTitle(title) {
+    return String(title || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 60);
+  }
+
+  function updateRenamePreview() {
+    const note = state.currentNote;
+    const titleInput = document.getElementById('renameNoteTitle');
+    const toggle = document.getElementById('renameNoteFileToggle');
+    const toPathEl = document.getElementById('renameNoteToPath');
+    if (!note || !titleInput || !toPathEl) return;
+
+    const dir = note.relPath.includes('/') ? note.relPath.slice(0, note.relPath.lastIndexOf('/') + 1) : '';
+    const currentFile = note.relPath.slice(dir.length);
+    const slug = slugifyTitle(titleInput.value);
+    const willRename = toggle ? toggle.checked : true;
+    const target = willRename && slug ? `${slug}.md` : currentFile;
+
+    toPathEl.textContent = dir + target;
+    toPathEl.classList.toggle('is-unchanged', target === currentFile);
+  }
+
+  window.openRenameNoteModal = function () {
+    if (!state.currentNote) return;
+    if (blockIfReadOnly()) return;
+
+    const modal = document.getElementById('renameNoteModal');
+    const titleInput = document.getElementById('renameNoteTitle');
+    const fromPathEl = document.getElementById('renameNoteFromPath');
+    const toggle = document.getElementById('renameNoteFileToggle');
+    if (!modal || !titleInput) return;
+
+    titleInput.value = state.currentNote.title || '';
+    if (fromPathEl) fromPathEl.textContent = state.currentNote.relPath;
+    if (toggle) toggle.checked = true;
+    updateRenamePreview();
+
+    modal.classList.add('active');
+    titleInput.focus();
+    titleInput.select();
+  };
+
+  window.closeRenameNoteModal = function () {
+    const modal = document.getElementById('renameNoteModal');
+    if (modal) modal.classList.remove('active');
+  };
+
+  window.submitRenameNote = async function () {
+    const note = state.currentNote;
+    if (!note) return;
+    if (blockIfReadOnly()) return;
+
+    const titleInput = document.getElementById('renameNoteTitle');
+    const toggle = document.getElementById('renameNoteFileToggle');
+    const submitBtn = document.getElementById('renameNoteSubmitBtn');
+    const newTitle = titleInput ? titleInput.value.trim() : '';
+
+    if (!newTitle) {
+      window.showToast('A note title is required.', 2500);
+      return;
+    }
+    const renameFile = toggle ? toggle.checked : true;
+    if (newTitle === note.title && !renameFile) {
+      window.closeRenameNoteModal();
+      return;
+    }
+    if (renameFile && !slugifyTitle(newTitle)) {
+      window.showToast('That title produces an empty filename. Use at least one letter or number.', 4000);
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Renaming…';
+    }
+
+    try {
+      const data = await postJson('./api/rename-note', {
+        relPath: note.relPath,
+        title: newTitle,
+        renameFile: renameFile
+      });
+
+      window.closeRenameNoteModal();
+      const relinked = (data.relinked || []).length;
+      window.showToast(
+        `Renamed to "${newTitle}"` + (relinked ? ` — repointed ${relinked} link${relinked === 1 ? '' : 's'}.` : '.'),
+        3500
+      );
+
+      // The note id is derived from its path, so re-open under the new identity.
+      const newId = data.noteId;
+      window.reloadKnowledgeData(() => {
+        const fresh = state.notes.find(n => n.id === newId) || state.notes.find(n => n.relPath === data.relPath);
+        if (fresh) openNote(fresh.id);
+        else closeModal();
+      });
+    } catch (err) {
+      window.showToast(`Could not rename note: ${err.message}`, 4500);
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Rename';
+      }
+    }
+  };
+
   window.promptDeleteCurrentNote = function () {
     if (!state.currentNote) return;
     window.promptDeleteNoteById(state.currentNote.id);
   };
 
   window.promptDeleteNoteById = function (noteId) {
-    if (isGuestMode()) {
-      window.showToast('🔒 Deleting notes requires signing in. Please sign in with Google.', 3500);
-      window.handleGoogleLogin();
-      return;
-    }
+    if (blockIfReadOnly()) return;
 
     const note = state.notes.find(n => n.id === noteId);
     if (!note) return;
@@ -1842,11 +2031,7 @@
   window.promptDeleteTopic = function (topicName) {
     if (!topicName || topicName === 'All') return;
 
-    if (isGuestMode()) {
-      window.showToast('🔒 Deleting topics requires signing in. Please sign in with Google.', 3500);
-      window.handleGoogleLogin();
-      return;
-    }
+    if (blockIfReadOnly()) return;
 
     const targetNotes = state.notes.filter(n => n.topic.toLowerCase() === topicName.toLowerCase());
     const sample = targetNotes[0];
@@ -1917,7 +2102,7 @@ source_url: "${deepLink}"${relatedYaml}
 
 # ${note.title}
 
-${note.bodyContent.trim()}
+${note.body.trim()}
 `;
 
     // 2. AI / LLM Ingestion Prompt
@@ -1965,7 +2150,7 @@ INGESTION INSTRUCTIONS:
       relPath: note.relPath,
       shareUrl: deepLink,
       wordCount: note.wordCount,
-      body: note.bodyContent
+      body: note.body
     }, null, 2);
 
     return {
@@ -2006,7 +2191,7 @@ INGESTION INSTRUCTIONS:
       notesMarkdownBody += `\n\n---\n\n## Note ${idx + 1}/${targetNotes.length}: ${n.title}\n\n`;
       notesMarkdownBody += `> **Metadata**: Domain: \`${n.domain}\` | Type: \`${n.type}\` | Tags: ${n.tags.map(t => `\`#${t}\``).join(', ')} | Path: \`${n.relPath}\`\n`;
       notesMarkdownBody += `> **Direct Link**: ${noteDeepLink}\n\n`;
-      notesMarkdownBody += `${n.bodyContent.trim()}\n`;
+      notesMarkdownBody += `${n.body.trim()}\n`;
     });
 
     const markdownPayload = `---
@@ -2073,7 +2258,7 @@ INGESTION INSTRUCTIONS:
         summary: n.summary,
         relPath: n.relPath,
         shareUrl: `${baseUrl}?note=${encodeURIComponent(n.id)}`,
-        body: n.bodyContent
+        body: n.body
       }))
     }, null, 2);
 
@@ -2378,11 +2563,7 @@ INGESTION INSTRUCTIONS:
   };
 
   window.openIngestModal = function () {
-    if (isGuestMode()) {
-      showToast('🔒 Ingestion requires signing in. Please sign in with Google.', 3500);
-      window.handleGoogleLogin();
-      return;
-    }
+    if (blockIfReadOnly()) return;
     const modal = document.getElementById('ingestModal');
     if (modal) {
       modal.classList.add('active');
@@ -2444,7 +2625,7 @@ INGESTION INSTRUCTIONS:
     if (!dropdown) return;
     dropdown.innerHTML = '<option value="">-- Fetching raw inbox files... --</option>';
 
-    fetch('./api/raw-files')
+    apiFetch('./api/raw-files')
       .then(res => {
         if (!res.ok) throw new Error('API offline');
         return res.json();
@@ -2478,7 +2659,7 @@ INGESTION INSTRUCTIONS:
     if (previewBox) previewBox.classList.remove('hidden');
     if (previewMeta) previewMeta.textContent = `Loading ${filename}...`;
 
-    fetch(`./api/raw-file?name=${encodeURIComponent(filename)}`)
+    apiFetch(`./api/raw-file?name=${encodeURIComponent(filename)}`)
       .then(res => res.json())
       .then(data => {
         if (data.content) {
@@ -2552,7 +2733,7 @@ related:
     if (btn) btn.disabled = true;
     showToast('⏳ Ingesting and compiling into Second Brain...', 2000);
 
-    fetch('./api/ingest', {
+    apiFetch('./api/ingest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2602,7 +2783,7 @@ related:
     if (btn) btn.disabled = true;
     showToast('⏳ Saving note and updating index...', 2000);
 
-    fetch('./api/ingest', {
+    apiFetch('./api/ingest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2633,7 +2814,98 @@ related:
   };
 
   /* ==========================================================================
-     Google Authentication & Guest Mode Controller
+     Knowledge Base Source Controller
+     ========================================================================== */
+
+  /** Reflects the current connection in the topbar pill. */
+  function updateSourceUI() {
+    const pill = document.getElementById('kbSourcePill');
+    const label = document.getElementById('kbSourceLabel');
+    const dot = document.getElementById('kbSourceDot');
+    if (!window.KBSource) return;
+
+    const status = window.KBSource.getStatus();
+    const text = {
+      live: status.kbName || status.label,
+      snapshot: `${status.kbName || status.label} (snapshot)`,
+      cache: `${status.kbName || status.label} (offline)`,
+      '': 'Not connected'
+    }[status.mode] || status.label;
+
+    const dotState = {
+      live: 'is-live',
+      snapshot: 'is-readonly',
+      cache: 'is-offline',
+      '': 'is-error'
+    }[status.mode] || 'is-error';
+
+    if (label) label.textContent = text;
+    if (dot) dot.className = `kb-source-dot ${dotState}`;
+    if (pill) {
+      pill.classList.toggle('is-readonly', status.mode !== 'live');
+      pill.title = status.mode === 'live'
+        ? `Connected to ${status.label} — read/write. Click to change.`
+        : `${readOnlyReason()} Click to change.`;
+    }
+
+    // Sidebar footer mirrors the same truth, worded for the "is it live?" glance.
+    const footerDot = document.getElementById('footerStatusDot');
+    const footerTitle = document.getElementById('footerStatusTitle');
+    const footerSub = document.getElementById('footerStatusSubtitle');
+    const footerText = {
+      live: 'System Live',
+      snapshot: 'Read-Only Snapshot',
+      cache: 'Offline (Cached)',
+      '': 'Not Connected'
+    }[status.mode] || 'Not Connected';
+    if (footerTitle) footerTitle.textContent = footerText;
+    if (footerSub) {
+      footerSub.textContent = status.mode
+        ? status.label
+        : (status.lastError || 'Click to choose a knowledge base');
+    }
+    if (footerDot) footerDot.className = `status-indicator-dot ${dotState}`;
+
+    document.body.classList.toggle('kb-readonly', isReadOnly());
+    if (state.currentNote) renderModalTags(state.currentNote);
+  }
+
+  function showConnectPrompt() {
+    const prompt = document.getElementById('kbConnectPrompt');
+    const reason = document.getElementById('kbConnectReason');
+    const status = window.KBSource ? window.KBSource.getStatus() : null;
+    if (reason) {
+      reason.textContent = (status && status.lastError)
+        || 'No knowledge base is connected yet.';
+    }
+    if (prompt) prompt.classList.remove('hidden');
+    console.warn('[KB] No Knowledge Base data available.');
+  }
+
+  function hideConnectPrompt() {
+    const prompt = document.getElementById('kbConnectPrompt');
+    if (prompt) prompt.classList.add('hidden');
+  }
+
+  window.openKbSourceSettings = function () {
+    if (window.KBSource) window.KBSource.openSettings();
+  };
+
+  // Reconnecting swaps the whole knowledge base out, so drop everything and reload.
+  window.addEventListener('kb:source_reconnect', async () => {
+    window.KB_DATA = null;
+    state.currentNote = null;
+    if (window.showToast) window.showToast('Connecting to knowledge base…', 2500);
+    await loadData();
+    if (window.KB_DATA && window.showToast) {
+      window.showToast(`Loaded ${state.notes.length} notes.`, 2500);
+    }
+  });
+
+  if (window.KBSource) window.KBSource.onChange(updateSourceUI);
+
+  /* ==========================================================================
+     Google Authentication Controller
      ========================================================================== */
 
   function updateAuthUI(user) {
@@ -2643,54 +2915,45 @@ related:
     const displayName = document.getElementById('userDisplayName');
     const menuName = document.getElementById('userMenuName');
     const menuEmail = document.getElementById('userMenuEmail');
-    const guestPill = document.getElementById('guestModeIndicator');
-    const ingestLabel = document.getElementById('ingestBtnLabel');
 
     if (user) {
       if (signInBtn) signInBtn.classList.add('hidden');
       if (profileChip) profileChip.classList.remove('hidden');
-      if (guestPill) guestPill.classList.add('hidden');
-      if (ingestLabel) ingestLabel.textContent = 'Ingest';
       if (avatarImg) {
         avatarImg.src = user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'User')}&background=8b5cf6&color=fff`;
       }
-      const name = user.displayName || user.email?.split('@')[0] || 'User';
+      const name = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
       if (displayName) displayName.textContent = name;
       if (menuName) menuName.textContent = user.displayName || name;
       if (menuEmail) menuEmail.textContent = user.email || '';
     } else {
       if (signInBtn) signInBtn.classList.remove('hidden');
       if (profileChip) profileChip.classList.add('hidden');
-      if (guestPill) guestPill.classList.remove('hidden');
-      if (ingestLabel) ingestLabel.textContent = '🔒 Ingest';
       const menuDropdown = document.getElementById('userMenuDropdown');
       if (menuDropdown) menuDropdown.classList.add('hidden');
-    }
-
-    if (state.currentNote) {
-      renderModalTags(state.currentNote);
     }
   }
 
   window.handleGoogleLogin = async function () {
-    if (window.KBAuth) {
-      try {
-        showToast('🔑 Signing in with Google...', 2500);
-        await window.KBAuth.loginWithGoogle();
-      } catch (err) {
-        console.error('Login error:', err);
-      }
+    if (!window.KBAuth) {
+      if (window.showToast) window.showToast('Google Sign-In is not configured for this deployment.', 4000);
+      return;
+    }
+    try {
+      showToast('Signing in with Google…', 2500);
+      await window.KBAuth.loginWithGoogle();
+    } catch (err) {
+      console.error('Login error:', err);
     }
   };
 
   window.handleGoogleLogout = async function () {
-    if (window.KBAuth) {
-      try {
-        await window.KBAuth.logout();
-        showToast('Signed out successfully. Switched to Guest Mode.', 2500);
-      } catch (err) {
-        console.error('Logout error:', err);
-      }
+    if (!window.KBAuth) return;
+    try {
+      await window.KBAuth.logout();
+      showToast('Signed out.', 2500);
+    } catch (err) {
+      console.error('Logout error:', err);
     }
   };
 
@@ -2734,6 +2997,30 @@ related:
     }
   };
 
+  /* Topbar overflow ("More") menu — holds the secondary actions so the bar never wraps. */
+  window.toggleTopbarMore = function (e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('topbarMoreMenu');
+    const btn = document.getElementById('topbarMoreBtn');
+    if (!menu) return;
+    const opening = menu.classList.contains('hidden');
+    menu.classList.toggle('hidden', !opening);
+    if (btn) btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+  };
+
+  function closeTopbarMore() {
+    const menu = document.getElementById('topbarMoreMenu');
+    const btn = document.getElementById('topbarMoreBtn');
+    if (menu && !menu.classList.contains('hidden')) menu.classList.add('hidden');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  // Any click outside the overflow menu closes it; menu items close it after acting.
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.topbar-more')) closeTopbarMore();
+    else if (e.target.closest('.more-menu-item')) closeTopbarMore();
+  });
+
   window.markAllNotificationsRead = function () {
     unreadNotificationsCount = 0;
     const badge = document.getElementById('notifBadge');
@@ -2746,7 +3033,7 @@ related:
 
   async function fetchNotifications() {
     try {
-      const res = await fetch('./api/notifications');
+      const res = await apiFetch('./api/notifications');
       if (res.ok) {
         const data = await res.json();
         cachedNotifications = data.notifications || [];
@@ -2821,38 +3108,34 @@ related:
   };
 
   /* ==========================================================================
-     Google Drive & Ingestion Sync Controller
+     Sync Controller — asks the KB server to pull from git and recompile
      ========================================================================== */
 
   window.triggerGoogleDriveSync = async function () {
+    if (blockIfReadOnly()) return;
+
     const btn = document.getElementById('syncDriveBtn');
     const txt = document.getElementById('syncBtnText');
     if (btn) btn.classList.add('syncing');
-    if (txt) txt.textContent = 'Syncing...';
-    showToast('🔄 Syncing Google Drive inbox & mirroring NotebookLM...', 3000);
+    if (txt) txt.textContent = 'Syncing…';
 
     try {
-      const res = await fetch('./api/sync', { method: 'POST' });
-      const data = await res.json();
-      
-      setTimeout(async () => {
-        try {
-          const notesRes = await fetch('./api/notes');
-          if (notesRes.ok) {
-            window.KB_DATA = await notesRes.json();
-            loadData();
-          }
-          fetchNotifications();
-        } catch (e) {}
+      const res = await apiFetch('./api/sync', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
 
-        if (btn) btn.classList.remove('syncing');
-        if (txt) txt.textContent = 'Sync';
-        showToast('✅ Google Drive & Notebooks sync completed!', 3500);
-      }, 3000);
+      const notesRes = await apiFetch('./api/notes');
+      if (notesRes.ok) {
+        window.KB_DATA = await notesRes.json();
+        loadData();
+      }
+      fetchNotifications();
+
+      showToast(data.message || `✅ Synced — ${state.notes.length} notes indexed.`, 3500);
     } catch (err) {
+      showToast('⚠️ Sync failed: ' + (err && err.message ? err.message : 'server unreachable'), 4000);
+    } finally {
       if (btn) btn.classList.remove('syncing');
-      if (txt) txt.textContent = 'Sync';
-      showToast('⚠️ Sync request sent to background.', 3000);
+      if (txt) txt.textContent = 'Sync now';
     }
   };
 

@@ -109,21 +109,34 @@ class KnowledgeGraph {
     this.alpha = 0.8;
   }
 
+  layoutWorld(nodeCount) {
+    const need = Math.sqrt(Math.max(1, nodeCount)) * 95;
+    return {
+      w: Math.max(this.width || 1100, need),
+      h: Math.max(this.height || 700, need)
+    };
+  }
+
   filterAndRebuild() {
     if (!this.rawNodes || this.rawNodes.length === 0) return;
 
     this.nodeMap.clear();
-
-    const w = this.width || 1100;
-    const h = this.height || 700;
-    const cx = w / 2;
-    const cy = h / 2;
 
     // Filter nodes
     let activeNodes = this.rawNodes.filter(n => {
       if (this.filterTopic === 'All') return true;
       return n.topic === this.filterTopic;
     });
+
+    // The layout lives in its own world, sized for the node count rather than
+    // for the canvas. Clamping 500 nodes into a phone-sized box used to jam
+    // them into a ring along the edges; now the world stays roomy and the view
+    // zooms to fit it (and the user can pinch/pan in).
+    this.world = this.layoutWorld(activeNodes.length);
+    const w = this.world.w;
+    const h = this.world.h;
+    const cx = w / 2;
+    const cy = h / 2;
 
     const activeNodeIds = new Set(activeNodes.map(n => n.id));
 
@@ -137,7 +150,15 @@ class KnowledgeGraph {
     // Compute Distinct Topics for Cluster Anchors
     const activeTopics = Array.from(new Set(activeNodes.map(n => n.topic))).sort();
     const hubAnchors = {};
-    const clusterRingRadius = activeTopics.length > 1 ? Math.min(w, h) * 0.38 : 0;
+    // The biggest topic's spiral has to fit between its anchor and the world
+    // wall, otherwise its outer notes get clamped and stack up as straight
+    // lines along the edges.
+    const biggestTopic = Math.max(1, ...activeTopics.map(
+      t => activeNodes.filter(n => n.topic === t && !n.isHub).length));
+    const maxOrbit = 60 + Math.sqrt(biggestTopic) * 26;
+    const clusterRingRadius = activeTopics.length > 1
+      ? Math.max(0, Math.min(Math.min(w, h) * 0.38, Math.min(w, h) / 2 - maxOrbit - 40))
+      : 0;
     
     activeTopics.forEach((tName, i) => {
       const angle = (i / Math.max(1, activeTopics.length)) * (2 * Math.PI) - (Math.PI / 2);
@@ -160,8 +181,11 @@ class KnowledgeGraph {
       } else {
         const count = topicNoteCounters[n.topic] || 0;
         topicNoteCounters[n.topic] = count + 1;
-        const orbitAngle = (count * 1.35) % (2 * Math.PI);
-        const orbitDist = 55 + ((count * 18) % 65);
+        // Golden-angle phyllotaxis: an even spiral around the topic hub whatever
+        // the note count, instead of a few fixed orbits that overlap hard once a
+        // topic passes ~50 notes.
+        const orbitAngle = count * 2.39996;
+        const orbitDist = 60 + Math.sqrt(count) * 26;
         initX = anchor.x + Math.cos(orbitAngle) * orbitDist;
         initY = anchor.y + Math.sin(orbitAngle) * orbitDist;
       }
@@ -213,13 +237,41 @@ class KnowledgeGraph {
   }
 
   centerGraph(immediate = false) {
-    this.targetTransform.x = 0;
-    this.targetTransform.y = 0;
-    this.targetTransform.k = 0.88;
+    this.userAdjustedView = false;
+    const cw = this.width || 1100;
+    const ch = this.height || 700;
+
+    // Fit what actually exists: the nodes' bounding box, not the (deliberately
+    // roomy) layout world, so a settled graph fills the canvas.
+    let minX, minY, maxX, maxY;
+    if (this.nodes && this.nodes.length) {
+      minX = minY = Infinity;
+      maxX = maxY = -Infinity;
+      this.nodes.forEach(n => {
+        minX = Math.min(minX, n.x - n.radius);
+        minY = Math.min(minY, n.y - n.radius);
+        maxX = Math.max(maxX, n.x + n.radius);
+        maxY = Math.max(maxY, n.y + n.radius);
+      });
+    } else {
+      const world = this.world || { w: cw, h: ch };
+      minX = 0; minY = 0; maxX = world.w; maxY = world.h;
+    }
+
+    const pad = 24;
+    const bw = Math.max(1, maxX - minX) + pad * 2;
+    const bh = Math.max(1, maxY - minY) + pad * 2;
+    const k = Math.max(0.15, Math.min(1.4, Math.min(cw / bw, ch / bh)));
+    const x = cw / 2 - ((minX + maxX) / 2) * k;
+    const y = ch / 2 - ((minY + maxY) / 2) * k;
+
+    this.targetTransform.x = x;
+    this.targetTransform.y = y;
+    this.targetTransform.k = k;
     if (immediate) {
-      this.transform.x = 0;
-      this.transform.y = 0;
-      this.transform.k = 0.88;
+      this.transform.x = x;
+      this.transform.y = y;
+      this.transform.k = k;
     }
   }
 
@@ -227,7 +279,8 @@ class KnowledgeGraph {
   zoomOut() { this.zoomAt(this.width / 2, this.height / 2, 0.8); }
 
   zoomAt(screenX, screenY, factor) {
-    const newK = Math.max(0.25, Math.min(3.0, this.targetTransform.k * factor));
+    this.userAdjustedView = true;
+    const newK = Math.max(0.15, Math.min(3.0, this.targetTransform.k * factor));
     const worldX = (screenX - this.targetTransform.x) / this.targetTransform.k;
     const worldY = (screenY - this.targetTransform.y) / this.targetTransform.k;
     this.targetTransform.k = newK;
@@ -259,7 +312,10 @@ class KnowledgeGraph {
       this.render();
       if (!isMoving && this.alpha < 0.003 && !this.draggedNode && !this.isPanning) {
         idleFrames++;
-        if (idleFrames > 30) {
+        // The layout has stopped moving — refit once so the settled graph is
+        // framed, not the spread it happened to have on the first frame.
+        if (idleFrames === 1 && !this.userAdjustedView) this.centerGraph();
+        if (idleFrames > 40) {
           this.stopSimulation();
           return;
         }
@@ -294,8 +350,9 @@ class KnowledgeGraph {
 
     const nodes = this.nodes;
     const edges = this.edges;
-    const w = this.width || 1100;
-    const h = this.height || 700;
+    const world = this.world || { w: this.width || 1100, h: this.height || 700 };
+    const w = world.w;
+    const h = world.h;
     const cx = w / 2;
     const cy = h / 2;
 
@@ -309,8 +366,11 @@ class KnowledgeGraph {
         const distSq = dx * dx + dy * dy || 1;
         const dist = Math.sqrt(distSq);
 
-        if (dist < 140) {
-          const force = Math.min(6, 600 / distSq) * this.alpha;
+        // Short range: a 140px bubble around each of 300+ sibling notes adds up to
+        // more area than any canvas has, and the surplus pressure used to push
+        // whole topics out to the world wall.
+        if (dist < 70) {
+          const force = Math.min(4, 260 / distSq) * this.alpha;
           const fx = (dx / dist) * force;
           const fy = (dy / dist) * force;
 
@@ -333,8 +393,11 @@ class KnowledgeGraph {
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
 
+      // Opposite signs: the spring pulls the two ends together. Applying the
+      // same sign to both made every edge shove its target outward instead,
+      // which drifted most of the graph into the world wall.
       if (!u.fx && !u.isHub) { u.vx += fx; u.vy += fy; }
-      if (!v.fx && !v.isHub) { v.vx += fx; v.vy += fy; }
+      if (!v.fx && !v.isHub) { v.vx -= fx; v.vy -= fy; }
     }
 
     // 3. Center gravity
@@ -357,8 +420,19 @@ class KnowledgeGraph {
         n.x += n.vx;
         n.y += n.vy;
 
-        n.x = Math.max(n.radius + 15, Math.min(w - n.radius - 15, n.x));
-        n.y = Math.max(n.radius + 15, Math.min(h - n.radius - 15, n.y));
+        // Soft walls: push back over the last 120px instead of snapping to the
+        // edge, which used to stack escapees into straight lines along the border.
+        const soft = 120;
+        const lo = n.radius + 15;
+        const hiX = w - n.radius - 15;
+        const hiY = h - n.radius - 15;
+        if (n.x < lo + soft) n.vx += (lo + soft - n.x) * 0.02;
+        if (n.x > hiX - soft) n.vx -= (n.x - (hiX - soft)) * 0.02;
+        if (n.y < lo + soft) n.vy += (lo + soft - n.y) * 0.02;
+        if (n.y > hiY - soft) n.vy -= (n.y - (hiY - soft)) * 0.02;
+
+        n.x = Math.max(lo, Math.min(hiX, n.x));
+        n.y = Math.max(lo, Math.min(hiY, n.y));
       }
     });
 
@@ -429,6 +503,18 @@ class KnowledgeGraph {
     });
 
     // 3. Nodes
+    const k = this.transform.k;
+    const hasActive = highlightedNodeIds.size > 0;
+    // A small graph, or a zoomed-in one, can carry every label. Otherwise only
+    // hubs (and, while something is hovered/selected, its neighbourhood).
+    const labelEverything = this.nodes.length <= 60 || k >= 1.5;
+    const showLabel = (n, isSelected, isHovered, isHighlighted) => {
+      if (isSelected || isHovered) return true;
+      if (hasActive) return isHighlighted;
+      if (labelEverything) return true;
+      return n.isHub;
+    };
+
     this.nodes.forEach(n => {
       const isHighlighted = highlightedNodeIds.size === 0 || highlightedNodeIds.has(n.id);
       const isSelected = this.selectedNode && this.selectedNode.id === n.id;
@@ -464,23 +550,28 @@ class KnowledgeGraph {
         ctx.fill();
       }
 
-      // Label text
-      ctx.font = n.isHub ? 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif' : '9.5px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      // Label text — level of detail. Painting 500 labels at once turns the
+      // canvas into a wall of chips (worst on a phone), so labels are earned:
+      // hubs and whatever is active always, everything else only once the user
+      // has zoomed in or the graph is small enough to be legible.
+      if (showLabel(n, isSelected, isHovered, isHighlighted)) {
+        ctx.font = n.isHub ? 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif' : '9.5px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
 
-      const labelY = n.y + n.radius + 9;
-      const metrics = ctx.measureText(n.label);
-      const bgW = metrics.width + 8;
-      const bgH = 14;
+        const labelY = n.y + n.radius + 9;
+        const metrics = ctx.measureText(n.label);
+        const bgW = metrics.width + 8;
+        const bgH = 14;
 
-      ctx.fillStyle = this.palette.tooltipBg;
-      ctx.beginPath();
-      ctx.roundRect(n.x - bgW / 2, labelY - bgH / 2, bgW, bgH, 3);
-      ctx.fill();
+        ctx.fillStyle = this.palette.tooltipBg;
+        ctx.beginPath();
+        ctx.roundRect(n.x - bgW / 2, labelY - bgH / 2, bgW, bgH, 3);
+        ctx.fill();
 
-      ctx.fillStyle = isSelected || isHovered ? this.palette.nodeActive : this.palette.nodeLabel;
-      ctx.fillText(n.label, n.x, labelY);
+        ctx.fillStyle = isSelected || isHovered ? this.palette.nodeActive : this.palette.nodeLabel;
+        ctx.fillText(n.label, n.x, labelY);
+      }
 
       ctx.restore();
     });
@@ -550,6 +641,7 @@ class KnowledgeGraph {
         this.alpha = 0.35;
       } else {
         this.isPanning = true;
+        this.userAdjustedView = true;
         this.panStart = { x: screenX - this.targetTransform.x, y: screenY - this.targetTransform.y };
       }
     });

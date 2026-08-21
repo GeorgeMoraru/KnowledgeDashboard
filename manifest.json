@@ -1,8 +1,8 @@
 {
-  "id": "com.smarthub.knowledgebase.dashboard",
-  "name": "Knowledge Base | SmartHub Second Brain",
-  "short_name": "KnowledgeBase",
-  "description": "Unified Karpathy LLM Wiki, Interactive Knowledge Graph & Second Brain Dashboard",
+  "id": "io.github.knowledgedashboard",
+  "name": "Knowledge Dashboard | Second Brain",
+  "short_name": "Knowledge",
+  "description": "Static PWA for browsing, searching, graphing and editing a Karpathy-style LLM wiki served by a knowledge base server.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

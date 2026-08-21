@@ -29,7 +29,7 @@
     }
   </script>
 
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 
 <body>
@@ -95,15 +95,15 @@
 
       </div>
 
-      <!-- Sidebar Footer Status -->
+      <!-- Sidebar Footer Status — filled in by updateSourceUI() -->
       <div class="sidebar-footer">
-        <div class="footer-system-status">
-          <span class="status-indicator-dot"></span>
-          <div class="status-text">
-            <div class="status-title">System Live</div>
-            <div class="status-subtitle">Port 7650 • Tailgate /kb</div>
-          </div>
-        </div>
+        <button class="footer-system-status" onclick="window.openKbSourceSettings()" title="Change knowledge base">
+          <span class="status-indicator-dot" id="footerStatusDot"></span>
+          <span class="status-text">
+            <span class="status-title" id="footerStatusTitle">Connecting…</span>
+            <span class="status-subtitle" id="footerStatusSubtitle">Locating knowledge base</span>
+          </span>
+        </button>
       </div>
 
     </aside>
@@ -152,13 +152,14 @@
           </div>
         </div>
 
-        <!-- Right: Actions, Sync, Install, Auth & Ingest -->
+        <!-- Right: KB connection, actions, auth. Secondary actions live in the More menu. -->
         <div class="topbar-right">
-          
-          <!-- Guest Mode Pill -->
-          <div id="guestModeIndicator" class="guest-mode-pill" title="Read-Only Guest Mode (Sign in with Google to edit or ingest notes)">
-            <span>👁️ Guest (Read-Only)</span>
-          </div>
+
+          <!-- Knowledge Base Connection Pill -->
+          <button id="kbSourcePill" class="kb-source-pill" onclick="window.openKbSourceSettings()" title="Knowledge base connection">
+            <span id="kbSourceDot" class="kb-source-dot"></span>
+            <span id="kbSourceLabel" class="kb-source-label">Connecting…</span>
+          </button>
 
           <!-- Notification Bell & Ingestion Activity Feed -->
           <div class="notification-container">
@@ -179,22 +180,6 @@
               </div>
             </div>
           </div>
-
-          <!-- Sync Google Drive Button -->
-          <button id="syncDriveBtn" class="btn-action btn-sync" onclick="window.triggerGoogleDriveSync()" title="Sync Google Drive & SecondBrain Inbox">
-            <svg id="syncIconSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-            </svg>
-            <span id="syncBtnText">Sync</span>
-          </button>
-
-          <!-- Install PWA Button (Hidden by default, shown when installable) -->
-          <button id="pwaInstallBtn" class="btn-action btn-install hidden" onclick="window.installPWA()" title="Install Knowledge Base Web App">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-            </svg>
-            <span>Install</span>
-          </button>
 
           <!-- Quick New Note Button -->
           <button id="openNewNoteBtn" class="btn-action btn-new-note" onclick="window.openQuickNoteModal()" title="Create a new Markdown note">
@@ -245,10 +230,31 @@
             <span id="themeIcon">🌙</span>
           </button>
 
-          <!-- Zima Status Chip -->
-          <div class="topbar-chip" title="Live Synced Second Brain">
-            <span class="chip-dot"></span>
-            <span id="totalNotesStat">—</span> Assets
+          <!-- Overflow Menu: secondary actions, kept out of the main bar so it never wraps -->
+          <div class="topbar-more">
+            <button id="topbarMoreBtn" class="btn-action btn-more" onclick="window.toggleTopbarMore(event)" title="More actions" aria-haspopup="true" aria-expanded="false">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="5" cy="12" r="1.8"></circle>
+                <circle cx="12" cy="12" r="1.8"></circle>
+                <circle cx="19" cy="12" r="1.8"></circle>
+              </svg>
+            </button>
+            <div id="topbarMoreMenu" class="topbar-more-menu hidden">
+              <div class="more-menu-stat">
+                <span class="chip-dot"></span>
+                <span id="totalNotesStat">—</span>&nbsp;notes indexed
+              </div>
+              <div class="more-menu-divider"></div>
+              <button class="more-menu-item" onclick="window.openKbSourceSettings()">
+                🔌 Knowledge base connection…
+              </button>
+              <button id="syncDriveBtn" class="more-menu-item" onclick="window.triggerGoogleDriveSync()" title="Pull the latest knowledge base contents">
+                <span id="syncIconSvg">🔄</span>&nbsp;<span id="syncBtnText">Sync now</span>
+              </button>
+              <button id="pwaInstallBtn" class="more-menu-item hidden" onclick="window.installPWA()" title="Install Knowledge Base Web App">
+                ⬇️ Install app
+              </button>
+            </div>
           </div>
 
         </div>
@@ -257,7 +263,22 @@
 
       <!-- Main Body Container -->
       <main class="app-body">
-        
+
+        <!-- Shown when no knowledge base could be reached and nothing is cached -->
+        <section id="kbConnectPrompt" class="kb-connect-prompt hidden">
+          <div class="kb-connect-card">
+            <div class="kb-connect-icon">🔌</div>
+            <h2>Connect a knowledge base</h2>
+            <p id="kbConnectReason">This dashboard reads its notes from a knowledge base server. Point it at yours to get started.</p>
+            <button class="btn-modal-primary" onclick="window.openKbSourceSettings()">Choose a knowledge base</button>
+            <p class="kb-connect-hint">
+              Run <code>python server/kb_server.py</code> in your KnowledgeBase repo, expose it with
+              <code>tailscale serve</code>, then paste that URL here. It is remembered on this device.
+            </p>
+          </div>
+        </section>
+
+
         <!-- Hero Metrics Strip — total card + one card per category, from KB_DATA.categories -->
         <section class="metrics-grid" id="metricsGrid"></section>
 
@@ -448,8 +469,46 @@
         <div id="modalRelated" class="modal-related-tags"></div>
         <div class="modal-footer-btns">
           <button id="modalDeleteFooterBtn" class="btn-modal-danger" onclick="window.promptDeleteCurrentNote()">🗑️ Delete Note</button>
+          <button id="modalRenameFooterBtn" class="btn-modal-secondary" onclick="window.openRenameNoteModal()">✏️ Rename</button>
           <button id="copyPathBtn" class="btn-modal-secondary">Copy Path</button>
           <button id="modalShareFooterBtn" class="btn-modal-primary">Share & Ingest</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename Note Modal -->
+  <div id="renameNoteModal" class="modal-backdrop">
+    <div class="modal-window modal-window-confirm">
+      <div class="modal-header">
+        <div class="modal-header-titles">
+          <div class="modal-path-badge">Rename</div>
+          <h2 class="modal-title">Rename Note</h2>
+        </div>
+        <button class="btn-modal-close" title="Close (Esc)" onclick="window.closeRenameNoteModal()">✕</button>
+      </div>
+      <div class="modal-scrollable-body">
+        <div class="form-group">
+          <label class="form-label" for="renameNoteTitle">New title</label>
+          <input type="text" id="renameNoteTitle" class="modern-input" autocomplete="off" />
+        </div>
+        <label class="rename-file-toggle">
+          <input type="checkbox" id="renameNoteFileToggle" checked />
+          <span>Also rename the file on disk</span>
+        </label>
+        <div class="rename-path-preview">
+          <div><span class="rename-path-label">From</span> <code id="renameNoteFromPath">—</code></div>
+          <div><span class="rename-path-label">To</span> <code id="renameNoteToPath">—</code></div>
+        </div>
+        <p class="rename-note-hint">
+          Every <code>[[wikilink]]</code> pointing at this note is repointed automatically,
+          and the rename is committed to git so history follows the file.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <div class="modal-footer-btns" style="width: 100%; justify-content: flex-end;">
+          <button class="btn-modal-secondary" onclick="window.closeRenameNoteModal()">Cancel</button>
+          <button id="renameNoteSubmitBtn" class="btn-modal-primary" onclick="window.submitRenameNote()">Rename</button>
         </div>
       </div>
     </div>
@@ -784,15 +843,11 @@
     }
   </script>
 
-  <!-- Firebase Compatibility SDK for Google Sign-In -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-  <script src="firebaseConfig.js?v=9"></script>
-
-  <!-- Offline Knowledge Payload & Fast Graph/App Controller -->
-  <script src="data.js?v=9"></script>
-  <script src="graph.js?v=9"></script>
-  <script src="app.js?v=9"></script>
+  <!-- KB connection layer (must run before app.js), optional auth, then the app -->
+  <script src="kb-source.js?v=10"></script>
+  <script src="auth.js?v=10"></script>
+  <script src="graph.js?v=10"></script>
+  <script src="app.js?v=10"></script>
 </body>
 
 </html>
