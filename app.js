@@ -3060,14 +3060,19 @@ related:
 
     const btn = document.getElementById('syncDriveBtn');
     const txt = document.getElementById('syncBtnText');
+    const topbarBtn = document.getElementById('topbarSyncDriveBtn');
+    const topbarTxt = document.getElementById('topbarSyncBtnText');
+
     if (btn) btn.classList.add('syncing');
     if (txt) txt.textContent = 'Syncing…';
+    if (topbarBtn) topbarBtn.classList.add('syncing');
+    if (topbarTxt) topbarTxt.textContent = 'Syncing…';
 
     try {
-      const res = await apiFetch('./api/sync', { method: 'POST' });
+      const res = await apiFetch('/api/sync', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
 
-      const notesRes = await apiFetch('./api/notes');
+      const notesRes = await apiFetch('/api/notes');
       if (notesRes.ok) {
         window.KB_DATA = await notesRes.json();
         loadData();
@@ -3080,6 +3085,8 @@ related:
     } finally {
       if (btn) btn.classList.remove('syncing');
       if (txt) txt.textContent = 'Sync now';
+      if (topbarBtn) topbarBtn.classList.remove('syncing');
+      if (topbarTxt) topbarTxt.textContent = 'Sync';
     }
   };
 

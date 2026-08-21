@@ -29,7 +29,7 @@
     }
   </script>
 
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=15">
 </head>
 
 <body>
@@ -220,6 +220,14 @@
               <path d="M12 5v14M5 12h14"></path>
             </svg>
             <span id="ingestBtnLabel">Ingest</span>
+          </button>
+
+          <!-- Google Drive Sync Button -->
+          <button id="topbarSyncDriveBtn" class="btn-action btn-sync" onclick="window.triggerGoogleDriveSync()" title="Sync Google Drive & Knowledge Base">
+            <svg id="topbarSyncIconSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span id="topbarSyncBtnText">Sync</span>
           </button>
 
           <!-- Theme Toggle -->
@@ -937,10 +945,10 @@
   </script>
 
   <!-- KB connection layer (must run before app.js), auth, graph, then app -->
-  <script src="kb-source.js?v=14"></script>
-  <script src="auth.js?v=14"></script>
-  <script src="graph.js?v=14"></script>
-  <script src="app.js?v=14"></script>
+  <script src="kb-source.js?v=15"></script>
+  <script src="auth.js?v=15"></script>
+  <script src="graph.js?v=15"></script>
+  <script src="app.js?v=15"></script>
 </body>
 
 </html>
