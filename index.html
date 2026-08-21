@@ -29,7 +29,7 @@
     }
   </script>
 
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
 </head>
 
 <body>
@@ -59,6 +59,25 @@
         <span>Sign in with Google</span>
       </button>
       <div id="authGateStatus" class="auth-gate-status"></div>
+    </div>
+  </div>
+
+  <!-- Full Screen App / KB Loading Splash Screen -->
+  <div id="appLoadingScreen" class="app-loading-screen hidden">
+    <div class="app-loading-card">
+      <div class="app-loading-spinner-box">
+        <div class="app-loading-pulse-ring"></div>
+        <div class="app-loading-logo">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a8 8 0 0 0-8 8c0 3.3 2 6.2 5 7.4V20a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2.6c3-1.2 5-4.1 5-7.4a8 8 0 0 0-8-8z"></path>
+            <line x1="9.5" y1="9" x2="9.51" y2="9"></line>
+            <line x1="14.5" y1="9" x2="14.51" y2="9"></line>
+            <path d="M9.5 13a3.5 3.5 0 0 0 5 0"></path>
+          </svg>
+        </div>
+      </div>
+      <h2 class="app-loading-title" id="appLoadingTitle">Logging in…</h2>
+      <p class="app-loading-subtitle" id="appLoadingSubtitle">Connecting to Knowledge Base</p>
     </div>
   </div>
 
@@ -351,10 +370,6 @@
           <h2 class="kb-empty-title">Your Second Brain is in Deep Orbit</h2>
           <p class="kb-empty-subtitle">Connect your Knowledge Base at the bottom of the sidebar to load your notes and graph.</p>
         </section>
-
-
-        <!-- Hero Metrics Strip — total card + one card per category, from KB_DATA.categories -->
-        <section class="metrics-grid" id="metricsGrid"></section>
 
         <!-- Search & View Controls Navigation Strip -->
         <section class="controls-ribbon">
@@ -933,10 +948,10 @@
   </script>
 
   <!-- KB connection layer (must run before app.js), auth, graph, then app -->
-  <script src="kb-source.js?v=18"></script>
-  <script src="auth.js?v=18"></script>
-  <script src="graph.js?v=18"></script>
-  <script src="app.js?v=18"></script>
+  <script src="kb-source.js?v=19"></script>
+  <script src="auth.js?v=19"></script>
+  <script src="graph.js?v=19"></script>
+  <script src="app.js?v=19"></script>
 </body>
 
 </html>

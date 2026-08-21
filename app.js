@@ -286,53 +286,79 @@
 
   let deepLinkApplied = false;
 
+  function showAppLoading(title = 'Logging in…', subtitle = 'Connecting to Knowledge Base') {
+    const screen = document.getElementById('appLoadingScreen');
+    const titleEl = document.getElementById('appLoadingTitle');
+    const subEl = document.getElementById('appLoadingSubtitle');
+    if (titleEl && title) titleEl.textContent = title;
+    if (subEl && subtitle) subEl.textContent = subtitle;
+    if (screen) {
+      screen.classList.remove('hidden');
+      screen.style.opacity = '1';
+    }
+  }
+
+  function hideAppLoading() {
+    const screen = document.getElementById('appLoadingScreen');
+    if (screen) {
+      screen.style.opacity = '0';
+      setTimeout(() => {
+        screen.classList.add('hidden');
+      }, 280);
+    }
+  }
+
   async function loadData() {
-    if (!window.KB_DATA && window.KBSource) {
-      const result = await window.KBSource.loadPayload();
-      if (result.payload) {
-        window.KB_DATA = result.payload;
-        if (result.offline && window.showToast) {
-          window.showToast('Offline — showing the last cached copy of this knowledge base.', 5000);
+    showAppLoading('Loading…', 'Connecting to your Knowledge Base');
+    try {
+      if (!window.KB_DATA && window.KBSource) {
+        const result = await window.KBSource.loadPayload();
+        if (result.payload) {
+          window.KB_DATA = result.payload;
+          if (result.offline && window.showToast) {
+            window.showToast('Offline — showing the last cached copy of this knowledge base.', 5000);
+          }
         }
       }
+      updateSourceUI();
+
+      if (!window.KB_DATA || !window.KB_DATA.notes || window.KB_DATA.notes.length === 0) {
+        document.body.classList.add('kb-empty');
+        if (el.topicTotalCount) el.topicTotalCount.textContent = '0';
+        if (el.totalNotesStat) el.totalNotesStat.textContent = '0';
+        return;
+      }
+      document.body.classList.remove('kb-empty');
+
+      state.notes = (window.KB_DATA.notes || []).map(n => ({
+        ...n,
+        tags: [...(n.tags || [])],
+        _searchStr: `${n.title} ${n.summary} ${(n.tags || []).join(' ')} ${n.topic} ${n.type} ${n.category}`.toLowerCase()
+      }));
+
+      state.topics = window.KB_DATA.topics || [];
+      state.types = window.KB_DATA.types || [];
+      state.tags = window.KB_DATA.tags || [];
+      state.taxonomy = window.KB_DATA.taxonomy || {};
+      state.categories = window.KB_DATA.categories || [];
+      state.defaultCategory = window.KB_DATA.defaultCategory || (state.categories[0] && state.categories[0].id) || 'general';
+
+      if (el.totalNotesStat) el.totalNotesStat.textContent = state.notes.length;
+
+      renderCategoryNav();
+      renderFacets();
+      initGraph();
+
+      // Deep-link only on first load — a reload after a write must not reopen a stale note id
+      if (!deepLinkApplied) {
+        deepLinkApplied = true;
+        parseUrlDeepLink();
+      }
+
+      render();
+    } finally {
+      hideAppLoading();
     }
-    updateSourceUI();
-
-    if (!window.KB_DATA || !window.KB_DATA.notes || window.KB_DATA.notes.length === 0) {
-      document.body.classList.add('kb-empty');
-      if (el.topicTotalCount) el.topicTotalCount.textContent = '0';
-      if (el.totalNotesStat) el.totalNotesStat.textContent = '0';
-      return;
-    }
-    document.body.classList.remove('kb-empty');
-
-    state.notes = (window.KB_DATA.notes || []).map(n => ({
-      ...n,
-      tags: [...(n.tags || [])],
-      _searchStr: `${n.title} ${n.summary} ${(n.tags || []).join(' ')} ${n.topic} ${n.type} ${n.category}`.toLowerCase()
-    }));
-
-    state.topics = window.KB_DATA.topics || [];
-    state.types = window.KB_DATA.types || [];
-    state.tags = window.KB_DATA.tags || [];
-    state.taxonomy = window.KB_DATA.taxonomy || {};
-    state.categories = window.KB_DATA.categories || [];
-    state.defaultCategory = window.KB_DATA.defaultCategory || (state.categories[0] && state.categories[0].id) || 'general';
-
-    if (el.totalNotesStat) el.totalNotesStat.textContent = state.notes.length;
-
-    renderCategoryNav();
-    renderMetricCards();
-    renderFacets();
-    initGraph();
-
-    // Deep-link only on first load — a reload after a write must not reopen a stale note id
-    if (!deepLinkApplied) {
-      deepLinkApplied = true;
-      parseUrlDeepLink();
-    }
-
-    render();
   }
 
   // Parse deep-link query parameters on page load
@@ -2898,7 +2924,11 @@ related:
       if (menuName) menuName.textContent = user.displayName || name;
       if (menuEmail) menuEmail.textContent = user.email || '';
       if (logoutBtn) logoutBtn.classList.remove('hidden');
+      if (!window.KB_DATA || !window.KB_DATA.notes || window.KB_DATA.notes.length === 0) {
+        showAppLoading('Logging in…', 'Connecting to Knowledge Base');
+      }
     } else {
+      hideAppLoading();
       if (authGate) authGate.classList.remove('hidden');
       if (menuAvatar) {
         menuAvatar.src = `https://ui-avatars.com/api/?name=User&background=6b7280&color=fff`;
