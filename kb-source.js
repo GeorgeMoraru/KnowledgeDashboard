@@ -24,6 +24,7 @@
 
   const LS_BASE_URL = 'kb_base_url';
   const LS_LAST_MODE = 'kb_last_mode';
+  const DEFAULT_REMOTE_KB = 'https://themeanmachine.taild1868e.ts.net/kb';
   const DB_NAME = 'kb-dashboard';
   const DB_VERSION = 1;
   const STORE = 'payload';
@@ -323,7 +324,18 @@
     if (initial) {
       setBaseUrl(initial, true);
     } else {
-      try { state.baseUrl = normalizeBase(localStorage.getItem(LS_BASE_URL) || ''); } catch (e) { /* ignore */ }
+      try {
+        const stored = localStorage.getItem(LS_BASE_URL);
+        if (stored) {
+          state.baseUrl = normalizeBase(stored);
+        } else if (location.hostname.includes('github.io') || location.protocol === 'file:') {
+          // Pre-configured remote Taigate / Tailscale funnel link for GitHub Pages
+          state.baseUrl = DEFAULT_REMOTE_KB;
+          localStorage.setItem(LS_BASE_URL, DEFAULT_REMOTE_KB);
+        } else {
+          state.baseUrl = normalizeBase('');
+        }
+      } catch (e) { /* ignore */ }
     }
   }
 
@@ -349,9 +361,9 @@
       '  <div class="kbsource-body">',
       '    <label class="kbsource-label" for="kbsource-url">Server URL</label>',
       '    <input id="kbsource-url" class="kbsource-input" type="url" spellcheck="false" autocomplete="off"',
-      '           placeholder="https://my-host.ts.net">',
+      '           placeholder="https://themeanmachine.taild1868e.ts.net/kb">',
       '    <p class="kbsource-hint">',
-      '      The address of your <code>kb_server.py</code> — typically a Tailscale hostname.',
+      '      Pre-configured Taigate URL: <code>https://themeanmachine.taild1868e.ts.net/kb</code>.',
       '      Leave empty to use whatever origin serves this page.',
       '    </p>',
       '    <div class="kbsource-result" hidden></div>',
