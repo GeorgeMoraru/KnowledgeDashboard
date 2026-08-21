@@ -2522,6 +2522,26 @@ INGESTION INSTRUCTIONS:
     }
   };
 
+  window.toggleSidebarCollapse = function () {
+    if (window.innerWidth <= 992) {
+      window.toggleMobileSidebar();
+      return;
+    }
+    const isCollapsed = document.body.classList.toggle('sidebar-collapsed');
+    try {
+      localStorage.setItem('kb_sidebar_collapsed', isCollapsed ? '1' : '0');
+    } catch (e) {}
+    if (window.graphEngine && typeof window.graphEngine.resize === 'function') {
+      setTimeout(() => window.graphEngine.resize(), 260);
+    }
+  };
+
+  try {
+    if (window.innerWidth > 992 && localStorage.getItem('kb_sidebar_collapsed') === '1') {
+      document.body.classList.add('sidebar-collapsed');
+    }
+  } catch (e) {}
+
   window.openIngestModal = function () {
     if (blockIfReadOnly()) return;
     const modal = document.getElementById('ingestModal');
