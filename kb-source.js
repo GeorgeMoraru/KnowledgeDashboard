@@ -326,7 +326,7 @@
     } else {
       try {
         const stored = localStorage.getItem(LS_BASE_URL);
-        if (stored) {
+        if (stored && stored.trim() !== '') {
           state.baseUrl = normalizeBase(stored);
         } else if (location.hostname.includes('github.io') || location.protocol === 'file:') {
           // Pre-configured remote Taigate / Tailscale funnel link for GitHub Pages

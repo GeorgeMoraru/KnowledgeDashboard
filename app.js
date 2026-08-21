@@ -355,6 +355,7 @@
         parseUrlDeepLink();
       }
 
+      setViewMode(state.viewMode || 'card');
       render();
     } finally {
       hideAppLoading();
@@ -2925,7 +2926,9 @@ related:
       if (menuEmail) menuEmail.textContent = user.email || '';
       if (logoutBtn) logoutBtn.classList.remove('hidden');
       if (!window.KB_DATA || !window.KB_DATA.notes || window.KB_DATA.notes.length === 0) {
-        showAppLoading('Logging in…', 'Connecting to Knowledge Base');
+        loadData();
+      } else {
+        hideAppLoading();
       }
     } else {
       hideAppLoading();

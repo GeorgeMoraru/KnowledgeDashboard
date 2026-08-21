@@ -4305,6 +4305,8 @@ body.kbsource-open {
 body.kb-empty .metrics-grid,
 body.kb-empty .controls-ribbon,
 body.kb-empty .results-header-bar,
+body.kb-empty .modern-cards-grid,
+body.kb-empty .modern-table-container,
 body.kb-empty .cards-view-grid,
 body.kb-empty .list-view-container,
 body.kb-empty .modern-graph-container,
