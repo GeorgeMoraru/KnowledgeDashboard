@@ -564,16 +564,26 @@
 
     // Notes filtered by search query AND category AND topic
     const topicFilteredNotes = catFilteredNotes.filter(n => {
-      if (state.selectedTopic !== 'All' && n.topic !== state.selectedTopic) return false;
+      if (state.selectedTopic !== 'All') {
+        const tLower = state.selectedTopic.toLowerCase();
+        const noteTopic = (n.topic || '').toLowerCase();
+        const noteDomain = (n.domain || '').toLowerCase();
+        const noteTopicName = (n.topicName || '').toLowerCase();
+        if (noteTopic !== tLower && noteDomain !== tLower && noteTopicName !== tLower) return false;
+      }
       return true;
     });
 
     // 1. Dynamic Topic Dropdown Selectors (both sidebar and controls ribbon)
-    const availableTopics = Array.from(new Set(catFilteredNotes.map(n => n.topic))).sort();
+    const allTopics = Array.from(new Set(state.notes.map(n => n.topic).filter(Boolean))).sort();
     let topicOptionsHtml = `<option value="All">All Topics (${catFilteredNotes.length})</option>`;
-    availableTopics.forEach(t => {
-      const count = catFilteredNotes.filter(n => n.topic === t).length;
-      topicOptionsHtml += `<option value="${escapeHtml(t)}"${state.selectedTopic === t ? ' selected' : ''}>${escapeHtml(t)} (${count})</option>`;
+    allTopics.forEach(t => {
+      const tLower = t.toLowerCase();
+      const countInCat = catFilteredNotes.filter(n => (n.topic || '').toLowerCase() === tLower || (n.domain || '').toLowerCase() === tLower || (n.topicName || '').toLowerCase() === tLower).length;
+      const countTotal = searchFilteredNotes.filter(n => (n.topic || '').toLowerCase() === tLower || (n.domain || '').toLowerCase() === tLower || (n.topicName || '').toLowerCase() === tLower).length;
+      const isSelected = (state.selectedTopic || '').toLowerCase() === tLower;
+      const displayLabel = state.selectedCategory === 'all' ? `${t} (${countTotal})` : (countInCat > 0 ? `${t} (${countInCat})` : `${t} (${countTotal})`);
+      topicOptionsHtml += `<option value="${escapeHtml(t)}"${isSelected ? ' selected' : ''}>${escapeHtml(displayLabel)}</option>`;
     });
 
     const topicSelectDropdown = document.getElementById('topicSelectDropdown');
@@ -594,7 +604,7 @@
     }
 
     if (el.topicTotalCount) {
-      el.topicTotalCount.textContent = availableTopics.length;
+      el.topicTotalCount.textContent = allTopics.length;
     }
 
     // Dynamic Graph Legend — the 8 biggest topics, then an explicit count of
@@ -935,10 +945,22 @@
   };
 
   window.selectTopic = function (topic) {
-    state.selectedTopic = topic;
+    state.selectedTopic = topic || 'All';
+
+    // If selecting a specific topic, check if current category contains this topic; if not, reset category to 'all' so notes are visible
+    if (state.selectedTopic !== 'All' && state.selectedCategory !== 'all') {
+      const topicLower = state.selectedTopic.toLowerCase();
+      const hasMatchingNoteInCat = state.notes.some(n => 
+        (n.category || '').toLowerCase() === state.selectedCategory.toLowerCase() && 
+        ((n.topic || '').toLowerCase() === topicLower || (n.domain || '').toLowerCase() === topicLower || (n.topicName || '').toLowerCase() === topicLower)
+      );
+      if (!hasMatchingNoteInCat) {
+        state.selectedCategory = 'all';
+      }
+    }
 
     if (window.graphEngine) {
-      window.graphEngine.filterByTopic(topic);
+      window.graphEngine.filterByTopic(state.selectedTopic);
     }
 
     syncBrowserUrl();
@@ -1054,9 +1076,23 @@
     const q = state.searchQuery.toLowerCase().trim();
 
     let filtered = state.notes.filter(note => {
-      if (state.selectedCategory !== 'all' && note.category !== state.selectedCategory) return false;
-      if (state.selectedTopic !== 'All' && note.topic !== state.selectedTopic) return false;
-      if (state.selectedType !== 'All' && note.type !== state.selectedType) return false;
+      if (state.selectedCategory !== 'all') {
+        const cLower = state.selectedCategory.toLowerCase();
+        const noteCat = (note.category || '').toLowerCase();
+        const noteCatName = (note.categoryName || '').toLowerCase();
+        if (noteCat !== cLower && noteCatName !== cLower) return false;
+      }
+      if (state.selectedTopic !== 'All') {
+        const tLower = state.selectedTopic.toLowerCase();
+        const noteTopic = (note.topic || '').toLowerCase();
+        const noteDomain = (note.domain || '').toLowerCase();
+        const noteTopicName = (note.topicName || '').toLowerCase();
+        if (noteTopic !== tLower && noteDomain !== tLower && noteTopicName !== tLower) return false;
+      }
+      if (state.selectedType !== 'All') {
+        const tpLower = state.selectedType.toLowerCase();
+        if ((note.type || '').toLowerCase() !== tpLower) return false;
+      }
       if (state.selectedTag && !note.tags.includes(state.selectedTag)) return false;
       if (!q) return true;
 
