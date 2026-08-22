@@ -364,10 +364,20 @@ body.sidebar-collapsed .sidebar-collapse-toggle-btn {
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 20px 20px;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px;
   border-bottom: 1px solid var(--border-subtle);
-  cursor: pointer;
+  position: relative;
+}
+
+.brand-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+  flex: 1;
 }
 
 .brand-icon-box{
@@ -380,6 +390,7 @@ body.sidebar-collapsed .sidebar-collapse-toggle-btn {
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 12px var(--accent-primary-glow);
+  flex-shrink: 0;
 }
 
 .brand-title{
@@ -400,12 +411,38 @@ body.sidebar-collapsed .sidebar-collapse-toggle-btn {
 
 .mobile-close-sidebar-btn{
   display: none;
-  background: transparent;
-  border: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
-  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
   cursor: pointer;
   margin-left: auto;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.mobile-close-sidebar-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.mobile-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 45;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
 }
 
 /* min-height:0 is required: without it the flex item refuses to shrink below its
@@ -2695,8 +2732,14 @@ mark {
     top: 0;
     left: 0;
     height: 100vh;
+    z-index: 100;
     transform: translateX(-100%);
-    box-shadow: 10px 0 40px var(--shadow-drop);
+    box-shadow: 10px 0 40px rgba(0, 0, 0, 0.45);
+    visibility: visible !important;
+    width: min(290px, 85vw) !important;
+    max-width: min(290px, 85vw) !important;
+    margin: 0 !important;
+    opacity: 1 !important;
   }
 
   .app-sidebar.mobile-open{
@@ -2704,44 +2747,88 @@ mark {
   }
 
   .mobile-close-sidebar-btn{
-    display: block;
+    display: inline-flex;
   }
 
-  .mobile-menu-trigger{
-    display: block;
+  .mobile-sidebar-backdrop.active,
+  body.mobile-sidebar-open .mobile-sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
   }
 
-  /* At this width the breadcrumb, search box and action buttons stop fitting on
-     one line and start overlapping — give the search a row of its own. */
+  /* Single-row mobile topbar: Title, Menu Toggle and Notification/Action buttons on the SAME line */
   .app-topbar{
-    height: auto;
-    flex-wrap: wrap;
-    padding: 10px 16px;
-    gap: 10px;
+    height: 56px;
+    flex-wrap: nowrap;
+    padding: 0 12px;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
   }
 
-  .topbar-center{
-    order: 3;
-    flex: 1 0 100%;
-    max-width: none;
+  .topbar-left{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
   }
 
-  .topbar-right{
-    flex: 0 0 auto;
+  .sidebar-collapse-toggle-btn {
+    display: inline-flex !important;
+    flex-shrink: 0;
   }
 
   .topbar-breadcrumb{
+    display: flex;
+    align-items: center;
+    gap: 5px;
     min-width: 0;
+    overflow: hidden;
+  }
+
+  .crumb-root {
+    font-size: 13.5px;
+    font-weight: 800;
+    white-space: nowrap;
+    color: var(--text-primary);
+  }
+
+  .crumb-separator {
+    color: var(--text-muted);
+    font-size: 12px;
   }
 
   .crumb-active{
+    font-size: 13px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--text-secondary);
+  }
+
+  .topbar-right{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .topbar-notes-stat{
+    display: none;
   }
 
   .topbar-chip{
     display: none;
+  }
+
+  .btn-action span {
+    display: none;
+  }
+
+  .btn-action {
+    padding: 6px 9px;
   }
 
   .app-body{
@@ -2768,6 +2855,44 @@ mark {
 }
 
 @media (max-width: 640px) {
+  .app-topbar {
+    height: 52px;
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .topbar-left {
+    gap: 6px;
+  }
+
+  .crumb-separator,
+  .crumb-active {
+    display: none;
+  }
+
+  .crumb-root {
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .topbar-right {
+    gap: 4px;
+  }
+
+  .btn-action {
+    padding: 6px 8px;
+    min-height: 32px;
+  }
+
+  #notifBellBtn {
+    display: inline-flex !important;
+  }
+
+  .activity-drawer {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
   .app-body{
     padding: 12px;
     gap: 16px;
@@ -2813,17 +2938,10 @@ mark {
     gap: 10px;
   }
 
-  /* Comfortable thumb targets once the pointer is a finger. */
-  .btn-action, .btn-modal-action, .nav-cat-item, .sh-nav-tab{
-    min-height: 36px;
-  }
-
   .metric-value{
     font-size: 24px;
   }
 
-  /* Graph overlays on a phone: the legend gives back canvas space and the
-     detail card sits above the toolbar instead of behind it. */
   .graph-legend-box{
     top: 12px;
     left: 12px;
@@ -2849,32 +2967,19 @@ mark {
 
 @media (max-width: 540px) {
   .topbar-right {
-    gap: 5px;
+    gap: 3px;
   }
 
-  .btn-ingest span,
-  .btn-new-note span {
-    display: none;
+  .btn-action {
+    padding: 5px 7px;
   }
 
-  .btn-ingest,
-  .btn-new-note {
-    padding: 6px 9px;
-  }
-
-  /* The URL is long and the dot already carries the status — drop the text. */
   .kb-source-label {
     display: none;
   }
 
   .kb-source-pill {
-    padding: 6px 9px;
-  }
-
-  .notif-dropdown {
-    right: -70px;
-    width: 320px;
-    max-width: calc(100vw - 20px);
+    padding: 5px 7px;
   }
 
   .modal-window {

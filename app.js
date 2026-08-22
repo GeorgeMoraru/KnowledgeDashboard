@@ -2660,11 +2660,16 @@ INGESTION INSTRUCTIONS:
 
   let cachedRawFiles = [];
 
-  window.toggleMobileSidebar = function () {
+  window.toggleMobileSidebar = function (event) {
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    if (event && typeof event.preventDefault === 'function') event.preventDefault();
     const sidebar = document.getElementById('facetsSidebar');
-    if (sidebar) {
-      sidebar.classList.toggle('mobile-open');
-    }
+    const backdrop = document.getElementById('mobileSidebarBackdrop');
+    if (!sidebar) return;
+
+    const isOpen = sidebar.classList.toggle('mobile-open');
+    if (backdrop) backdrop.classList.toggle('active', isOpen);
+    document.body.classList.toggle('mobile-sidebar-open', isOpen);
   };
 
   window.toggleSidebarCollapse = function () {
