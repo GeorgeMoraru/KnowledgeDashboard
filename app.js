@@ -3231,16 +3231,34 @@ related:
 
     try {
       const res = await apiFetch('/api/sync', { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
+      await res.json().catch(() => ({}));
 
-      const notesRes = await apiFetch('/api/notes');
+      // Poll sync status until complete (up to 15 seconds)
+      let finalResult = null;
+      for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 600));
+        const statusRes = await apiFetch('/api/sync/status').catch(() => null);
+        if (statusRes && statusRes.ok) {
+          const statusData = await statusRes.json();
+          if (!statusData.is_syncing) {
+            finalResult = statusData.last_result;
+            break;
+          }
+        }
+      }
+
+      const notesRes = await apiFetch('/api/notes?refresh=1');
       if (notesRes.ok) {
         window.KB_DATA = await notesRes.json();
         loadData();
       }
       fetchNotifications();
 
-      showToast(data.message || `✅ Synced — ${state.notes.length} notes indexed.`, 3500);
+      let msg = `✅ Synced — ${state.notes.length} notes indexed.`;
+      if (finalResult && finalResult.newsletter_feeds && finalResult.newsletter_feeds.new_articles > 0) {
+        msg = `✅ Synced — Ingested ${finalResult.newsletter_feeds.new_articles} new Opinion AI articles (${state.notes.length} total notes).`;
+      }
+      showToast(msg, 4000);
     } catch (err) {
       showToast('⚠️ Sync failed: ' + (err && err.message ? err.message : 'server unreachable'), 4000);
     } finally {
