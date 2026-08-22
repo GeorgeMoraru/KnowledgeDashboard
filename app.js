@@ -876,7 +876,10 @@
         e.preventDefault();
         el.searchInput.focus();
       } else if (e.key === 'Escape') {
-        if (isRenameModalOpen()) {
+        const notifDrawer = document.getElementById('notifDrawer');
+        if (notifDrawer && notifDrawer.classList.contains('open')) {
+          window.closeNotificationDrawer();
+        } else if (isRenameModalOpen()) {
           window.closeRenameNoteModal();
         } else if (isConfirmModalOpen()) {
           window.closeConfirmModal();
@@ -3126,75 +3129,130 @@ related:
     updateAuthUI(e.detail ? e.detail.user : null);
   });
 
-  window.toggleNotificationPanel = function (event) {
-    if (event) event.stopPropagation();
-    const dropdown = document.getElementById('notifPanelDropdown');
-    const bellBtn = document.getElementById('notifBellBtn');
-    if (!dropdown) return;
+  let activeNotifFilter = 'all';
+  let cachedNotificationsList = [];
 
-    const isHidden = dropdown.classList.contains('hidden');
+  window.toggleNotificationDrawer = function (event) {
+    if (event) event.stopPropagation();
+    const drawer = document.getElementById('notifDrawer');
+    const backdrop = document.getElementById('notifDrawerBackdrop');
+    const bellBtn = document.getElementById('notifBellBtn');
+    if (!drawer) return;
+
+    const isOpen = drawer.classList.contains('open');
     closeSettingsMenu();
 
-    if (isHidden) {
-      dropdown.classList.remove('hidden');
+    if (!isOpen) {
+      drawer.classList.add('open');
+      if (backdrop) backdrop.classList.add('open');
+      document.body.classList.add('notif-drawer-open');
       if (bellBtn) bellBtn.classList.add('active');
       fetchNotifications();
     } else {
-      dropdown.classList.add('hidden');
-      if (bellBtn) bellBtn.classList.remove('active');
+      window.closeNotificationDrawer();
     }
   };
 
+  window.toggleNotificationPanel = window.toggleNotificationDrawer;
+  window.openNotificationDrawer = window.toggleNotificationDrawer;
+
+  window.closeNotificationDrawer = function () {
+    const drawer = document.getElementById('notifDrawer');
+    const backdrop = document.getElementById('notifDrawerBackdrop');
+    const bellBtn = document.getElementById('notifBellBtn');
+    if (drawer) drawer.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('open');
+    document.body.classList.remove('notif-drawer-open');
+    if (bellBtn) bellBtn.classList.remove('active');
+  };
+
+  window.filterNotifDrawer = function (type) {
+    activeNotifFilter = type || 'all';
+    ['notifTabAll', 'notifTabNewsletters', 'notifTabWip'].forEach(id => {
+      const tab = document.getElementById(id);
+      if (tab) tab.classList.remove('active');
+    });
+    if (type === 'newsletter') {
+      const t = document.getElementById('notifTabNewsletters');
+      if (t) t.classList.add('active');
+    } else if (type === 'wip') {
+      const t = document.getElementById('notifTabWip');
+      if (t) t.classList.add('active');
+    } else {
+      const t = document.getElementById('notifTabAll');
+      if (t) t.classList.add('active');
+    }
+    renderNotifications(cachedNotificationsList);
+  };
+
   window.markAllNotificationsRead = function () {
-    unreadNotificationsCount = 0;
     const badge = document.getElementById('notifBadge');
     if (badge) badge.classList.add('hidden');
     try {
       localStorage.setItem('kb_notifs_last_read', String(Date.now()));
     } catch (e) {}
+    renderNotifications(cachedNotificationsList);
     showToast('✓ All notifications marked as read', 2000);
   };
 
   async function fetchNotifications() {
+    let items = [];
     try {
       const res = await apiFetch('./api/notifications');
       if (res.ok) {
         const data = await res.json();
-        cachedNotifications = data.notifications || [];
-        renderNotifications(cachedNotifications);
-        return;
+        items = data.notifications || [];
       }
     } catch (e) {
-      console.warn('Could not load notifications:', e);
+      console.warn('Could not load notifications from API:', e);
     }
 
-    // Static / GitHub Pages fallback: build feed from latest ingested notes
+    // Merge with latest KB_DATA notes to give full rich feed across all environments
     if (window.KB_DATA && Array.isArray(window.KB_DATA.notes)) {
-      const recent = [...window.KB_DATA.notes]
-        .sort((a, b) => {
-          const ta = a.updated || a.created || '';
-          const tb = b.updated || b.created || '';
-          return tb.localeCompare(ta);
-        })
-        .slice(0, 12)
-        .map(n => ({
-          title: n.title,
-          noteId: n.id,
-          timestamp: n.updated || n.created || 'Recent',
-          type: (n.tags && n.tags.includes('newsletter')) ? 'newsletter' : (n.tags && n.tags.includes('wip')) ? 'wip' : 'note',
-          summary: n.summary || (n.content ? n.content.slice(0, 120) : '')
-        }));
-      renderNotifications(recent);
+      const noteMap = new Map();
+      items.forEach(i => { if (i.noteId) noteMap.set(i.noteId, i); });
+
+      const sortedNotes = [...window.KB_DATA.notes].sort((a, b) => {
+        const ta = a.updated || a.created || '';
+        const tb = b.updated || b.created || '';
+        return tb.localeCompare(ta);
+      });
+
+      let newsletterCount = 0;
+      sortedNotes.forEach(n => {
+        const isNewsletter = (n.tags && n.tags.some(t => t.includes('newsletter') || t.includes('opinion-ai') || t.includes('emerging-ai')));
+        if (isNewsletter) newsletterCount++;
+        if (!noteMap.has(n.id)) {
+          const isWip = (n.category === 'work-in-progress' || (n.tags && n.tags.includes('wip')));
+          noteMap.set(n.id, {
+            title: n.title,
+            noteId: n.id,
+            relPath: n.relPath,
+            timestamp: n.updated || n.created || 'Recent',
+            type: isNewsletter ? 'newsletter' : isWip ? 'wip' : 'note',
+            summary: n.summary || (n.content ? n.content.replace(/^---[\s\S]*?---\s*/, '').slice(0, 140) : '')
+          });
+        }
+      });
+
+      const countEl = document.getElementById('notifTabNewsletterCount');
+      if (countEl) countEl.textContent = String(newsletterCount);
+
+      cachedNotificationsList = Array.from(noteMap.values());
+    } else {
+      cachedNotificationsList = items;
     }
+
+    renderNotifications(cachedNotificationsList);
   }
 
   function renderNotifications(notifs) {
-    const listEl = document.getElementById('notifList');
+    const listEl = document.getElementById('notifDrawerList') || document.getElementById('notifList');
     const badge = document.getElementById('notifBadge');
     if (!listEl) return;
 
     if (!notifs || notifs.length === 0) {
-      listEl.innerHTML = '<div class="notif-empty">No new ingestions or activity recorded yet.</div>';
+      listEl.innerHTML = '<div class="notif-empty">No recent ingestions or activity recorded yet.</div>';
       if (badge) badge.classList.add('hidden');
       return;
     }
@@ -3205,33 +3263,45 @@ related:
     } catch (e) {}
 
     let unreadCount = 0;
-    const itemsHtml = notifs.map(n => {
+    let filtered = notifs;
+    if (activeNotifFilter === 'newsletter') {
+      filtered = notifs.filter(n => n.type === 'newsletter');
+    } else if (activeNotifFilter === 'wip') {
+      filtered = notifs.filter(n => n.type === 'wip' || n.type === 'note');
+    }
+
+    const itemsHtml = filtered.map(n => {
       let badgeClass = '';
-      let badgeText = n.type || 'Ingest';
+      let badgeText = 'Note';
       if (n.type === 'newsletter') {
         badgeClass = 'badge-newsletter';
-        badgeText = 'Newsletter';
+        badgeText = 'Opinion AI';
       } else if (n.type === 'sync') {
         badgeClass = 'badge-sync';
         badgeText = 'Drive Sync';
+      } else if (n.type === 'wip') {
+        badgeClass = 'badge-wip';
+        badgeText = 'WIP';
       }
 
       const itemTimeMs = new Date(n.timestamp).getTime() || Date.now();
-      if (itemTimeMs > lastReadTime) unreadCount++;
+      const isUnread = itemTimeMs > lastReadTime;
+      if (isUnread) unreadCount++;
 
       return `
-        <div class="notif-item" onclick="window.openNotificationNote('${escapeHtml(n.noteId || '')}')">
-          <div class="notif-item-top">
-            <span class="notif-item-badge ${badgeClass}">${badgeText}</span>
-            <span class="notif-item-time">${escapeHtml(n.timestamp || '')}</span>
+        <div class="notif-card ${isUnread ? 'unread' : ''}" onclick="window.openNotificationNote('${escapeHtml(n.noteId || '')}')">
+          <div class="notif-card-top">
+            <span class="notif-card-badge ${badgeClass}">${badgeText}</span>
+            <span class="notif-card-time">${escapeHtml(n.timestamp || '')}</span>
           </div>
-          <div class="notif-item-title">${escapeHtml(n.title || 'Note')}</div>
-          <div class="notif-item-summary">${escapeHtml(n.summary || '')}</div>
+          <div class="notif-card-title">${escapeHtml(n.title || 'Untitled Note')}</div>
+          <div class="notif-card-summary">${escapeHtml(n.summary || '')}</div>
+          ${n.relPath ? `<div class="notif-card-path">📄 ${escapeHtml(n.relPath)}</div>` : ''}
         </div>
       `;
     }).join('');
 
-    listEl.innerHTML = itemsHtml;
+    listEl.innerHTML = itemsHtml || '<div class="notif-empty">No items matching this category.</div>';
 
     if (badge) {
       if (unreadCount > 0) {
@@ -3244,8 +3314,7 @@ related:
   }
 
   window.openNotificationNote = function (noteId) {
-    const notifDropdown = document.getElementById('notifPanelDropdown');
-    if (notifDropdown) notifDropdown.classList.add('hidden');
+    window.closeNotificationDrawer();
     if (noteId) {
       window.openNoteById(noteId);
     }
