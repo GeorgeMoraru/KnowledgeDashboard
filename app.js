@@ -3126,6 +3126,25 @@ related:
     updateAuthUI(e.detail ? e.detail.user : null);
   });
 
+  window.toggleNotificationPanel = function (event) {
+    if (event) event.stopPropagation();
+    const dropdown = document.getElementById('notifPanelDropdown');
+    const bellBtn = document.getElementById('notifBellBtn');
+    if (!dropdown) return;
+
+    const isHidden = dropdown.classList.contains('hidden');
+    closeSettingsMenu();
+
+    if (isHidden) {
+      dropdown.classList.remove('hidden');
+      if (bellBtn) bellBtn.classList.add('active');
+      fetchNotifications();
+    } else {
+      dropdown.classList.add('hidden');
+      if (bellBtn) bellBtn.classList.remove('active');
+    }
+  };
+
   window.markAllNotificationsRead = function () {
     unreadNotificationsCount = 0;
     const badge = document.getElementById('notifBadge');
@@ -3143,9 +3162,29 @@ related:
         const data = await res.json();
         cachedNotifications = data.notifications || [];
         renderNotifications(cachedNotifications);
+        return;
       }
     } catch (e) {
       console.warn('Could not load notifications:', e);
+    }
+
+    // Static / GitHub Pages fallback: build feed from latest ingested notes
+    if (window.KB_DATA && Array.isArray(window.KB_DATA.notes)) {
+      const recent = [...window.KB_DATA.notes]
+        .sort((a, b) => {
+          const ta = a.updated || a.created || '';
+          const tb = b.updated || b.created || '';
+          return tb.localeCompare(ta);
+        })
+        .slice(0, 12)
+        .map(n => ({
+          title: n.title,
+          noteId: n.id,
+          timestamp: n.updated || n.created || 'Recent',
+          type: (n.tags && n.tags.includes('newsletter')) ? 'newsletter' : (n.tags && n.tags.includes('wip')) ? 'wip' : 'note',
+          summary: n.summary || (n.content ? n.content.slice(0, 120) : '')
+        }));
+      renderNotifications(recent);
     }
   }
 
