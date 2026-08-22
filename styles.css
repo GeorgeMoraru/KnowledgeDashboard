@@ -322,11 +322,14 @@ html, body{
 body.sidebar-collapsed .app-sidebar {
   width: 0 !important;
   min-width: 0 !important;
-  margin-left: -280px !important;
+  max-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
   opacity: 0;
   pointer-events: none;
   border-right: none;
   overflow: hidden;
+  visibility: hidden;
 }
 
 .sidebar-collapse-toggle-btn {
@@ -1104,7 +1107,8 @@ body.sidebar-collapsed .sidebar-collapse-toggle-btn {
   box-shadow: 0 6px 18px var(--accent-primary-glow);
 }
 
-.btn-sync {
+.btn-sync,
+.btn-consolidate {
   background: var(--bg-surface-alt);
   border: 1px solid var(--border-card);
   color: var(--text-primary);
@@ -1112,16 +1116,23 @@ body.sidebar-collapsed .sidebar-collapse-toggle-btn {
   font-weight: 700;
   padding: 7px 12px;
   border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.btn-sync:hover {
+.btn-sync:hover,
+.btn-consolidate:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-hover);
   color: var(--accent-primary);
 }
 
 .btn-sync.syncing svg,
-.settings-menu-item.syncing svg {
+.settings-menu-item.syncing svg,
+.btn-consolidate.consolidating svg {
   animation: syncSpin 1s infinite linear;
 }
 

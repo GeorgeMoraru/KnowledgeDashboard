@@ -3269,6 +3269,36 @@ related:
     }
   };
 
+  window.triggerKbConsolidation = async function () {
+    if (blockIfReadOnly()) return;
+
+    const topbarBtn = document.getElementById('topbarConsolidateBtn');
+    const topbarTxt = document.getElementById('topbarConsolidateBtnText');
+
+    if (topbarBtn) topbarBtn.classList.add('consolidating');
+    if (topbarTxt) topbarTxt.textContent = 'Consolidating…';
+
+    try {
+      const res = await apiFetch('/api/consolidate', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+
+      const notesRes = await apiFetch('/api/notes?refresh=1');
+      if (notesRes.ok) {
+        window.KB_DATA = await notesRes.json();
+        loadData();
+      }
+      fetchNotifications();
+
+      const msg = data.message || `🪄 Consolidation complete — ${state.notes.length} notes indexed.`;
+      showToast(msg, 5000);
+    } catch (err) {
+      showToast('⚠️ Consolidation failed: ' + (err && err.message ? err.message : 'server unreachable'), 4000);
+    } finally {
+      if (topbarBtn) topbarBtn.classList.remove('consolidating');
+      if (topbarTxt) topbarTxt.textContent = 'Consolidate';
+    }
+  };
+
   /* ==========================================================================
      Progressive Web App (PWA) Install Controller
      ========================================================================== */
