@@ -1900,6 +1900,12 @@ mark {
   font-weight: 800;
   color: var(--text-primary);
   letter-spacing: -0.3px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.modal-title:hover {
+  color: var(--accent-primary);
 }
 
 .modal-header-actions{
@@ -3657,9 +3663,8 @@ body.notif-drawer-open .activity-drawer {
 body.kb-readonly .btn-ingest,
 body.kb-readonly #openNewNoteBtn,
 body.kb-readonly #deleteTopicBtn,
-body.kb-readonly #modalEditFooterBtn,
-body.kb-readonly #modalDeleteFooterBtn,
-body.kb-readonly #modalRenameFooterBtn,
+body.kb-readonly #modalDeleteHeaderBtn,
+body.kb-readonly #modalModeEditBtn,
 body.kb-readonly #syncDriveBtn {
   display: none !important;
 }

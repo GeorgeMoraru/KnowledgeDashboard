@@ -192,8 +192,6 @@
     el.copyPathBtn = document.getElementById('copyPathBtn');
     el.modalShareBtn = document.getElementById('modalShareBtn');
     el.modalDeleteHeaderBtn = document.getElementById('modalDeleteHeaderBtn');
-    el.modalDeleteFooterBtn = document.getElementById('modalDeleteFooterBtn');
-    el.modalShareFooterBtn = document.getElementById('modalShareFooterBtn');
 
     // Note Editor Fields
     el.noteEditTitle = document.getElementById('noteEditTitle');
@@ -965,14 +963,20 @@
       });
     }
 
-    // Note Modal Share triggers
-    if (el.modalShareBtn) {
-      el.modalShareBtn.addEventListener('click', () => {
-        if (state.currentNote) window.openShareModal('note', state.currentNote.id);
+    // Note Modal Title click -> quick edit
+    if (el.modalTitle) {
+      el.modalTitle.setAttribute('title', 'Click to edit title & note content');
+      el.modalTitle.addEventListener('click', () => {
+        if (state.currentNote && !isReadOnly()) {
+          window.switchNoteModalMode('edit');
+          setTimeout(() => el.noteEditTitle && el.noteEditTitle.focus(), 60);
+        }
       });
     }
-    if (el.modalShareFooterBtn) {
-      el.modalShareFooterBtn.addEventListener('click', () => {
+
+    // Note Modal Share trigger
+    if (el.modalShareBtn) {
+      el.modalShareBtn.addEventListener('click', () => {
         if (state.currentNote) window.openShareModal('note', state.currentNote.id);
       });
     }
@@ -1651,6 +1655,9 @@
         el.noteEditContent.value = state.currentNote.body || '';
         updateEditorWordCount();
       }
+      setTimeout(() => {
+        if (el.noteEditTitle) el.noteEditTitle.focus();
+      }, 50);
     } else if (mode === 'history') {
       fetchNoteHistory(state.currentNote.relPath);
     }

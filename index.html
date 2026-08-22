@@ -565,47 +565,7 @@
       <div class="modal-footer" id="modalViewFooter">
         <div id="modalRelated" class="modal-related-tags"></div>
         <div class="modal-footer-btns">
-          <button id="modalDeleteFooterBtn" class="btn-modal-danger" onclick="window.promptDeleteCurrentNote()">🗑️ Delete Note</button>
-          <button id="modalRenameFooterBtn" class="btn-modal-secondary" onclick="window.openRenameNoteModal()">✏️ Rename</button>
           <button id="copyPathBtn" class="btn-modal-secondary">Copy Path</button>
-          <button id="modalShareFooterBtn" class="btn-modal-primary">Share & Ingest</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Rename Note Modal -->
-  <div id="renameNoteModal" class="modal-backdrop">
-    <div class="modal-window modal-window-confirm">
-      <div class="modal-header">
-        <div class="modal-header-titles">
-          <div class="modal-path-badge">Rename</div>
-          <h2 class="modal-title">Rename Note</h2>
-        </div>
-        <button class="btn-modal-close" title="Close (Esc)" onclick="window.closeRenameNoteModal()">✕</button>
-      </div>
-      <div class="modal-scrollable-body">
-        <div class="form-group">
-          <label class="form-label" for="renameNoteTitle">New title</label>
-          <input type="text" id="renameNoteTitle" class="modern-input" autocomplete="off" />
-        </div>
-        <label class="rename-file-toggle">
-          <input type="checkbox" id="renameNoteFileToggle" checked />
-          <span>Also rename the file on disk</span>
-        </label>
-        <div class="rename-path-preview">
-          <div><span class="rename-path-label">From</span> <code id="renameNoteFromPath">—</code></div>
-          <div><span class="rename-path-label">To</span> <code id="renameNoteToPath">—</code></div>
-        </div>
-        <p class="rename-note-hint">
-          Every <code>[[wikilink]]</code> pointing at this note is repointed automatically,
-          and the rename is committed to git so history follows the file.
-        </p>
-      </div>
-      <div class="modal-footer">
-        <div class="modal-footer-btns" style="width: 100%; justify-content: flex-end;">
-          <button class="btn-modal-secondary" onclick="window.closeRenameNoteModal()">Cancel</button>
-          <button id="renameNoteSubmitBtn" class="btn-modal-primary" onclick="window.submitRenameNote()">Rename</button>
         </div>
       </div>
     </div>
