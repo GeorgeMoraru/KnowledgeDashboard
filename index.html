@@ -198,7 +198,15 @@
             <span id="totalNotesStat">0</span>&nbsp;notes
           </div>
 
-          <!-- Notification Bell & Ingestion Activity Feed -->
+          <!-- Ingest Button -->
+          <button id="openIngestBtn" class="btn-action btn-ingest" onclick="window.openIngestModal()" title="Ingest knowledge, sync feeds, create notes">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M12 5v14M5 12h14"></path>
+            </svg>
+            <span id="ingestBtnLabel">Ingest</span>
+          </button>
+
+          <!-- Notification Bell (next to Settings) -->
           <div class="notification-container">
             <button id="notifBellBtn" class="btn-action btn-notif" onclick="window.toggleNotificationDrawer(event)" title="Recent Ingestions & Activity Sidebar">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -208,39 +216,6 @@
               <span id="notifBadge" class="notif-badge hidden">0</span>
             </button>
           </div>
-
-          <!-- Quick New Note Button -->
-          <button id="openNewNoteBtn" class="btn-action btn-new-note" onclick="window.openQuickNoteModal()" title="Create a new Markdown note">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            <span>Note</span>
-          </button>
-
-          <!-- Ingest Button -->
-          <button id="openIngestBtn" class="btn-action btn-ingest" onclick="window.openIngestModal()" title="Ingest raw data or inbox files">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M12 5v14M5 12h14"></path>
-            </svg>
-            <span id="ingestBtnLabel">Ingest</span>
-          </button>
-
-          <!-- Google Drive Sync Button -->
-          <button id="topbarSyncDriveBtn" class="btn-action btn-sync" onclick="window.triggerGoogleDriveSync()" title="Sync Google Drive, RSS Feeds & Knowledge Base">
-            <svg id="topbarSyncIconSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-            </svg>
-            <span id="topbarSyncBtnText">Sync</span>
-          </button>
-
-          <!-- Knowledge Base Consolidation Button -->
-          <button id="topbarConsolidateBtn" class="btn-action btn-consolidate" onclick="window.triggerKbConsolidation()" title="Consolidate & Sanitize Knowledge Base (merge duplicates, repair links, delete orphaned files)">
-            <svg id="topbarConsolidateIconSvg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
-            </svg>
-            <span id="topbarConsolidateBtnText">Consolidate</span>
-          </button>
 
           <!-- Settings & Profile Dropdown Menu -->
           <div class="settings-container">
@@ -663,15 +638,17 @@
       <div class="modal-header">
         <div class="modal-header-titles">
           <div class="modal-path-badge">Intake & Synthesis Engine</div>
-          <h2 class="modal-title">📥 Ingest Knowledge Asset</h2>
+          <h2 class="modal-title">📥 Ingest Knowledge</h2>
         </div>
         <button id="ingestModalClose" class="btn-modal-close" title="Close (Esc)" onclick="window.closeIngestModal()">✕</button>
       </div>
 
       <!-- Ingest Tabs -->
       <div class="modal-subtabs">
-        <button class="subtab-btn active" id="ingestTabRaw" onclick="window.switchIngestMode('raw')">Select from Raw Inbox (raw/)</button>
-        <button class="subtab-btn" id="ingestTabManual" onclick="window.switchIngestMode('manual')">Quick Capture / New Note</button>
+        <button class="subtab-btn active" id="ingestTabRaw" onclick="window.switchIngestMode('raw')">📂 Raw Inbox</button>
+        <button class="subtab-btn" id="ingestTabManual" onclick="window.switchIngestMode('manual')">✏️ Quick Capture</button>
+        <button class="subtab-btn" id="ingestTabSync" onclick="window.switchIngestMode('sync')">🔄 Sync</button>
+        <button class="subtab-btn" id="ingestTabFeeds" onclick="window.switchIngestMode('feeds')">📡 RSS Feeds</button>
       </div>
 
       <div class="modal-scrollable-body">
@@ -741,27 +718,38 @@
 
           <div class="form-submit-row">
             <button id="btnSubmitRawIngest" class="btn-action btn-primary btn-lg" onclick="window.submitRawIngestion()">
-              ⚡ Ingest & Synthesize Note
+              ⚡ Ingest &amp; Synthesize Note
             </button>
           </div>
         </div>
 
-        <!-- Mode 2: Manual Capture -->
+        <!-- Mode 2: Quick Capture -->
         <div id="ingestModeManual" class="ingest-tab-pane">
-          <div class="form-row">
-            <div class="form-group form-group-narrow">
-              <label class="form-label">Category:</label>
-              <select id="manualIngestCategory" class="modern-select" onchange="window.updateDomainOptions('manual')"></select>
-            </div>
-            <div class="form-group form-group-wide">
-              <label class="form-label">Domain:</label>
-              <select id="manualIngestDomain" class="modern-select"></select>
+          <div class="form-group">
+            <label class="form-label">Quick Templates:</label>
+            <div class="template-pills-row">
+              <button class="template-pill active" onclick="window.applyNoteTemplate('concept')">💡 Concept Note</button>
+              <button class="template-pill" onclick="window.applyNoteTemplate('procedure')">🛠️ Procedure / How-To</button>
+              <button class="template-pill" onclick="window.applyNoteTemplate('spec')">📐 Technical Spec</button>
+              <button class="template-pill" onclick="window.applyNoteTemplate('reference')">📚 Reference Guide</button>
+              <button class="template-pill" onclick="window.applyNoteTemplate('adr')">⚖️ ADR Architecture</button>
+              <button class="template-pill" onclick="window.applyNoteTemplate('meeting')">📝 Scratchpad</button>
             </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Note Title:</label>
-            <input type="text" id="manualIngestTitle" class="modern-input" placeholder="e.g. Vector Embedding Indexing Pipelines" oninput="window.updateManualPreview()" />
+          <div class="form-row">
+            <div class="form-group" style="flex:2;">
+              <label class="form-label">Note Title: *</label>
+              <input type="text" id="manualIngestTitle" class="modern-input" placeholder="e.g. Vector Embedding Indexing Pipelines" oninput="window.updateManualPreview()" />
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">Category:</label>
+              <select id="manualIngestCategory" class="modern-select" onchange="window.updateDomainOptions('manual')"></select>
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">Domain:</label>
+              <select id="manualIngestDomain" class="modern-select"></select>
+            </div>
           </div>
 
           <div class="form-row">
@@ -799,89 +787,117 @@
 
           <div class="form-submit-row">
             <button id="btnSubmitManualIngest" class="btn-action btn-primary btn-lg" onclick="window.submitManualIngestion()">
-              💾 Save & Index Note
+              💾 Save &amp; Index Note
             </button>
           </div>
         </div>
 
-      </div>
-    </div>
-  </div>
+        <!-- Mode 3: Sync -->
+        <div id="ingestModeSync" class="ingest-tab-pane">
+          <div class="sync-sources-grid">
 
-  <!-- Quick Note Creation Modal -->
-  <div id="quickNoteModal" class="modal-backdrop">
-    <div class="modal-window modal-window-quicknote">
-      <div class="modal-header">
-        <div class="modal-header-titles">
-          <div class="modal-path-badge">Create Knowledge Asset</div>
-          <h2 class="modal-title">New Markdown Note</h2>
-        </div>
-        <button id="quickNoteModalClose" class="btn-modal-close" title="Close (Esc)" onclick="window.closeQuickNoteModal()">✕</button>
-      </div>
+            <!-- Google Drive Sync Card -->
+            <div class="sync-source-card">
+              <div class="sync-source-header">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 16.74V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12"></path>
+                  <path d="M2 20h20a2 2 0 0 0 0-4H2a2 2 0 0 0 0 4z"></path>
+                </svg>
+                <div>
+                  <div class="sync-source-title">Google Drive</div>
+                  <div class="sync-source-desc">Pull inbox files from your configured Google Drive folder</div>
+                </div>
+              </div>
+              <div class="sync-source-status" id="syncDriveStatus">Ready to sync</div>
+              <button class="btn-action btn-primary" id="btnSyncDrive" onclick="window.triggerGoogleDriveSync()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                </svg>
+                Sync Drive
+              </button>
+            </div>
 
-      <div class="modal-scrollable-body">
-        <div class="form-group">
-          <label class="form-label">Quick Templates:</label>
-          <div class="template-pills-row">
-            <button class="template-pill active" onclick="window.applyNoteTemplate('concept')">💡 Concept Note</button>
-            <button class="template-pill" onclick="window.applyNoteTemplate('procedure')">🛠️ Procedure / How-To</button>
-            <button class="template-pill" onclick="window.applyNoteTemplate('spec')">📐 Technical Spec</button>
-            <button class="template-pill" onclick="window.applyNoteTemplate('reference')">📚 Reference Guide</button>
-            <button class="template-pill" onclick="window.applyNoteTemplate('adr')">⚖️ ADR Architecture</button>
-            <button class="template-pill" onclick="window.applyNoteTemplate('meeting')">📝 Scratchpad</button>
+            <!-- RSS Feeds Sync Card -->
+            <div class="sync-source-card">
+              <div class="sync-source-header">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 11a9 9 0 0 1 9 9"></path>
+                  <path d="M4 4a16 16 0 0 1 16 16"></path>
+                  <circle cx="5" cy="19" r="1"></circle>
+                </svg>
+                <div>
+                  <div class="sync-source-title">RSS Feeds</div>
+                  <div class="sync-source-desc">Fetch and ingest new articles from all configured RSS feeds</div>
+                </div>
+              </div>
+              <div id="syncFeedsList" class="sync-feeds-mini-list">Loading feeds...</div>
+              <div class="sync-source-status" id="syncRssStatus">Ready to sync</div>
+              <button class="btn-action btn-primary" id="btnSyncRss" onclick="window.triggerRssFeedsSync()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                </svg>
+                Sync RSS Feeds
+              </button>
+            </div>
+
+            <!-- Consolidate Card -->
+            <div class="sync-source-card">
+              <div class="sync-source-header">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+                </svg>
+                <div>
+                  <div class="sync-source-title">Consolidate KB</div>
+                  <div class="sync-source-desc">Merge duplicates, repair links, delete orphaned files</div>
+                </div>
+              </div>
+              <div class="sync-source-status" id="syncConsolidateStatus">Ready to consolidate</div>
+              <button class="btn-action btn-primary" id="btnSyncConsolidate" onclick="window.triggerKbConsolidation()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+                </svg>
+                Consolidate
+              </button>
+            </div>
+
           </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group" style="flex:2;">
-            <label class="form-label">Note Title: *</label>
-            <input type="text" id="quickNoteTitle" class="modern-input" placeholder="e.g. Graph Database Memory Optimization" />
+        <!-- Mode 4: Manage RSS Feeds -->
+        <div id="ingestModeFeeds" class="ingest-tab-pane">
+          <div class="feeds-list-section">
+            <h3 class="feeds-section-title">Configured RSS Feeds</h3>
+            <div id="feedsConfigList" class="feeds-config-list">Loading...</div>
           </div>
-          <div class="form-group" style="flex:1;">
-            <label class="form-label">Category: *</label>
-            <select id="quickNoteCategory" class="modern-select" onchange="window.updateQuickNoteDomains()"></select>
-          </div>
-          <div class="form-group" style="flex:1;">
-            <label class="form-label">Topic / Domain: *</label>
-            <select id="quickNoteDomain" class="modern-select"></select>
+
+          <div class="feeds-add-section">
+            <h3 class="feeds-section-title">Add New RSS Feed</h3>
+            <div class="form-group">
+              <label class="form-label">Feed Name:</label>
+              <input type="text" id="newFeedName" class="modern-input" placeholder="e.g. Hacker News AI" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Feed URL (RSS/Atom):</label>
+              <input type="url" id="newFeedUrl" class="modern-input" placeholder="https://example.com/feed.rss" />
+            </div>
+            <div class="form-row">
+              <div class="form-group form-group-narrow">
+                <label class="form-label">Category:</label>
+                <select id="newFeedCategory" class="modern-select" onchange="window.updateFeedDomainOptions()"></select>
+              </div>
+              <div class="form-group form-group-wide">
+                <label class="form-label">Domain:</label>
+                <select id="newFeedDomain" class="modern-select"></select>
+              </div>
+            </div>
+            <div class="form-submit-row">
+              <button class="btn-action btn-primary btn-lg" onclick="window.addRssFeed()">
+                📡 Add RSS Feed
+              </button>
+            </div>
           </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group" style="flex:1;">
-            <label class="form-label">Content Type:</label>
-            <select id="quickNoteType" class="modern-select">
-              <option value="concept">Concept</option>
-              <option value="procedure">Procedure</option>
-              <option value="spec">Spec</option>
-              <option value="reference">Reference</option>
-              <option value="decision">Decision</option>
-              <option value="retrospective">Retrospective</option>
-            </select>
-          </div>
-          <div class="form-group" style="flex:2;">
-            <label class="form-label">Tags (comma-separated):</label>
-            <input type="text" id="quickNoteTags" class="modern-input" placeholder="ai, vector, performance, database" />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Summary / Atomic Concept:</label>
-          <input type="text" id="quickNoteSummary" class="modern-input" placeholder="Brief 1-2 sentence core takeaway..." />
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Markdown Content:</label>
-          <textarea id="quickNoteContent" class="note-editor-textarea" style="min-height:200px;" placeholder="Write markdown content here..."></textarea>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <div style="font-size:12px; color:var(--text-muted);">Stored directly into second brain knowledge structure.</div>
-        <div class="modal-footer-btns">
-          <button class="btn-modal-secondary" onclick="window.closeQuickNoteModal()">Cancel</button>
-          <button id="btnSubmitQuickNote" class="btn-modal-primary" onclick="window.submitQuickNote()">✨ Create & Open Note</button>
-        </div>
       </div>
     </div>
   </div>

@@ -2692,7 +2692,7 @@ INGESTION INSTRUCTIONS:
     }
   } catch (e) {}
 
-  window.openIngestModal = function () {
+  window.openIngestModal = function (tab) {
     if (blockIfReadOnly()) return;
     const modal = document.getElementById('ingestModal');
     if (modal) {
@@ -2701,7 +2701,13 @@ INGESTION INSTRUCTIONS:
       window.updateDomainOptions('manual');
       window.refreshRawFiles();
       window.updateManualPreview();
+      if (tab) window.switchIngestMode(tab);
     }
+  };
+
+  // Redirect openQuickNoteModal to Quick Capture tab inside Ingest modal
+  window.openQuickNoteModal = function () {
+    window.openIngestModal('manual');
   };
 
   window.closeIngestModal = function () {
@@ -2712,24 +2718,154 @@ INGESTION INSTRUCTIONS:
   };
 
   window.switchIngestMode = function (mode) {
-    const tabRaw = document.getElementById('ingestTabRaw');
-    const tabManual = document.getElementById('ingestTabManual');
-    const paneRaw = document.getElementById('ingestModeRaw');
-    const paneManual = document.getElementById('ingestModeManual');
+    const tabs = {
+      raw: document.getElementById('ingestTabRaw'),
+      manual: document.getElementById('ingestTabManual'),
+      sync: document.getElementById('ingestTabSync'),
+      feeds: document.getElementById('ingestTabFeeds'),
+    };
+    const panes = {
+      raw: document.getElementById('ingestModeRaw'),
+      manual: document.getElementById('ingestModeManual'),
+      sync: document.getElementById('ingestModeSync'),
+      feeds: document.getElementById('ingestModeFeeds'),
+    };
 
-    if (mode === 'raw') {
-      tabRaw.classList.add('active');
-      tabManual.classList.remove('active');
-      paneRaw.classList.add('active');
-      paneManual.classList.remove('active');
-    } else {
-      tabManual.classList.add('active');
-      tabRaw.classList.remove('active');
-      paneManual.classList.add('active');
-      paneRaw.classList.remove('active');
-      window.updateManualPreview();
+    Object.keys(tabs).forEach(k => {
+      if (tabs[k]) tabs[k].classList.toggle('active', k === mode);
+      if (panes[k]) panes[k].classList.toggle('active', k === mode);
+    });
+
+    if (mode === 'manual') window.updateManualPreview();
+    if (mode === 'sync') window.loadSyncFeedsList();
+    if (mode === 'feeds') window.loadFeedsConfig();
+  };
+
+  // Load feeds list into the Sync tab mini-list
+  window.loadSyncFeedsList = function () {
+    const el = document.getElementById('syncFeedsList');
+    if (!el) return;
+    apiFetch('./api/feeds').then(r => r.json()).then(feeds => {
+      if (!feeds || !feeds.length) {
+        el.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">No feeds configured. Add one in the RSS Feeds tab.</span>';
+        return;
+      }
+      el.innerHTML = feeds.map(f =>
+        `<div class="sync-feed-row">
+          <span class="sync-feed-dot" style="background:${f.enabled ? 'var(--accent-green,#22c55e)' : 'var(--text-muted)'}"></span>
+          <span class="sync-feed-name">${escapeHtml(f.name)}</span>
+        </div>`
+      ).join('');
+    }).catch(() => {
+      el.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">Could not load feeds (local API only).</span>';
+    });
+  };
+
+  // Trigger RSS feed sync
+  window.triggerRssFeedsSync = function () {
+    const status = document.getElementById('syncRssStatus');
+    const btn = document.getElementById('btnSyncRss');
+    if (status) status.textContent = 'Syncing RSS feeds...';
+    if (btn) btn.disabled = true;
+    apiFetch('./api/sync', { method: 'POST', body: JSON.stringify({ source: 'rss' }) })
+      .then(r => r.json())
+      .then(data => {
+        if (status) status.textContent = data.message || 'Sync initiated';
+        showToast('RSS feed sync started in background', 'success');
+      })
+      .catch(() => {
+        if (status) status.textContent = 'Sync failed — local API only';
+        showToast('RSS sync requires local backend', 'warn');
+      })
+      .finally(() => { if (btn) btn.disabled = false; });
+  };
+
+  // Load configured feeds into the RSS Feeds management tab
+  window.loadFeedsConfig = function () {
+    const el = document.getElementById('feedsConfigList');
+    if (!el) return;
+    el.innerHTML = '<div style="font-size:13px;color:var(--text-muted)">Loading...</div>';
+    apiFetch('./api/feeds').then(r => r.json()).then(feeds => {
+      if (!feeds || !feeds.length) {
+        el.innerHTML = '<div style="font-size:13px;color:var(--text-muted)">No RSS feeds configured yet.</div>';
+        return;
+      }
+      el.innerHTML = feeds.map((f, i) =>
+        `<div class="feed-config-row">
+          <div class="feed-config-info">
+            <span class="feed-config-name">${escapeHtml(f.name)}</span>
+            <span class="feed-config-url">${escapeHtml(f.url)}</span>
+            <span class="feed-config-domain">${escapeHtml(f.domain || '')}</span>
+          </div>
+          <div class="feed-config-actions">
+            <span class="feed-status-badge ${f.enabled ? 'enabled' : 'disabled'}">${f.enabled ? 'Active' : 'Disabled'}</span>
+            <button class="btn-sm btn-danger-sm" onclick="window.removeFeed(${i})" title="Remove feed">✕</button>
+          </div>
+        </div>`
+      ).join('');
+    }).catch(() => {
+      el.innerHTML = '<div style="font-size:13px;color:var(--text-muted)">Could not load feeds (local API only).</div>';
+    });
+    // Also populate the category dropdown for the Add form
+    window.updateFeedDomainOptions();
+  };
+
+  // Populate newFeedCategory dropdown
+  window.updateFeedDomainOptions = function () {
+    const catSel = document.getElementById('newFeedCategory');
+    const domSel = document.getElementById('newFeedDomain');
+    if (!catSel || !domSel) return;
+    if (!catSel.options.length) catSel.innerHTML = categoryOptionsHtml(state.defaultCategory);
+    const cat = catSel.value || state.defaultCategory;
+    domSel.innerHTML = domainsFor(cat).map(d =>
+      `<option value="${d.id}">${escapeHtml(d.name)} (${d.id})</option>`
+    ).join('');
+  };
+
+  // Add a new RSS feed
+  window.addRssFeed = async function () {
+    const name = (document.getElementById('newFeedName')?.value || '').trim();
+    const url = (document.getElementById('newFeedUrl')?.value || '').trim();
+    const domain = document.getElementById('newFeedDomain')?.value || '';
+    if (!name || !url) { showToast('Feed name and URL are required', 'warn'); return; }
+    try {
+      const r = await apiFetch('./api/feeds/add', {
+        method: 'POST',
+        body: JSON.stringify({ name, url, domain, enabled: true })
+      });
+      const data = await r.json();
+      if (data.success) {
+        showToast(`Feed "${name}" added successfully`, 'success');
+        document.getElementById('newFeedName').value = '';
+        document.getElementById('newFeedUrl').value = '';
+        window.loadFeedsConfig();
+      } else {
+        showToast(data.error || 'Failed to add feed', 'error');
+      }
+    } catch (e) {
+      showToast('Could not add feed — local API only', 'error');
     }
   };
+
+  // Remove an RSS feed by index
+  window.removeFeed = async function (index) {
+    try {
+      const r = await apiFetch('./api/feeds/remove', {
+        method: 'POST',
+        body: JSON.stringify({ index })
+      });
+      const data = await r.json();
+      if (data.success) {
+        showToast('Feed removed', 'success');
+        window.loadFeedsConfig();
+      } else {
+        showToast(data.error || 'Failed to remove feed', 'error');
+      }
+    } catch (e) {
+      showToast('Could not remove feed — local API only', 'error');
+    }
+  };
+
 
   window.updateDomainOptions = function (mode) {
     const catSelect = document.getElementById(mode === 'raw' ? 'rawIngestCategory' : 'manualIngestCategory');
