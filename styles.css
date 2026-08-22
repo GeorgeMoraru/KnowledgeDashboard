@@ -3554,6 +3554,7 @@ mark {
   position: relative;
   display: flex;
   align-items: center;
+  overflow: visible;
 }
 
 .btn-notif {
@@ -3561,6 +3562,7 @@ mark {
   background: var(--bg-surface-alt);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
+  overflow: visible;
 }
 
 .btn-notif:hover,
