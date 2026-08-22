@@ -259,6 +259,21 @@
           emit();
           return { payload: payload, mode: 'snapshot', offline: false };
         } catch (snapErr) {
+          try {
+            // Fallback to local bundled static snapshot if remote is momentarily unreachable
+            const res = await fetch('./kb.json');
+            if (res && res.ok) {
+              const payload = await res.json();
+              state.mode = 'snapshot';
+              state.online = true;
+              state.kbName = payload.kbName || '';
+              state.fetchedAt = new Date().toISOString();
+              localStorage.setItem(LS_LAST_MODE, 'snapshot');
+              cachePut(payload);
+              emit();
+              return { payload: payload, mode: 'snapshot', offline: false };
+            }
+          } catch (localSnapErr) {}
           state.lastError = describeError(apiErr, state.baseUrl);
         }
       }

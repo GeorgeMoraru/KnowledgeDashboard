@@ -1223,10 +1223,10 @@
           <div>
             <div class="sh-card-top">
               <div class="sh-card-badges">
-                <span class="sh-badge-category">● ${note.categoryName}</span>
-                <span class="sh-topic-badge">${note.topic}</span>
+                <span class="sh-badge-category">● ${escapeHtml(note.categoryName || categoryName(note.category))}</span>
+                <span class="sh-topic-badge">${escapeHtml(note.topic || '')}</span>
               </div>
-              <span class="sh-type-pill">${note.type}</span>
+              <span class="sh-type-pill">${escapeHtml(note.type || 'note')}</span>
             </div>
             <h3 class="sh-card-title">${highlightedTitle}</h3>
             <p class="sh-card-snippet">${highlightedSummary}</p>
@@ -1234,7 +1234,7 @@
           <div>
             <div class="sh-card-tags-list">${tagsHtml}</div>
             <div class="sh-card-bottom">
-              <span>Updated: ${note.updated}</span>
+              <span>Updated: ${escapeHtml(note.updated || '')}</span>
               <div class="sh-card-actions">
                 <button class="sh-card-delete-btn" onclick="event.stopPropagation(); window.promptDeleteNoteById('${note.id}')" title="Delete Note">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1284,10 +1284,10 @@
         <tr onclick="window.openNoteById('${note.id}')" style="--topic-accent: ${color}; --cat-accent: ${categoryColor(note.category)};">
           <td>
             <div class="sh-table-title">${highlightedTitle}</div>
-            <div class="sh-table-path">${escapeHtml(note.relPath)}</div>
+            <div class="sh-table-path">${escapeHtml(note.relPath || '')}</div>
           </td>
-          <td class="col-category"><span class="sh-badge-category">● ${note.categoryName}</span></td>
-          <td class="col-topic"><span class="sh-topic-badge">${note.topic}</span></td>
+          <td class="col-category"><span class="sh-badge-category">● ${escapeHtml(note.categoryName || categoryName(note.category))}</span></td>
+          <td class="col-topic"><span class="sh-topic-badge">${escapeHtml(note.topic || '')}</span></td>
           <td class="col-type"><span class="sh-type-pill">${note.type}</span></td>
           <td class="col-tags">${tagsHtml}</td>
           <td class="col-updated">${note.updated}</td>
