@@ -534,6 +534,13 @@
       catCounts[c.id] = searchFilteredNotes.filter(n => n.category === c.id).length;
     });
 
+    const topicCounts = {};
+    searchFilteredNotes.forEach(n => {
+      if (n.topic) {
+        topicCounts[n.topic] = (topicCounts[n.topic] || 0) + 1;
+      }
+    });
+
     if (el.categoryBar) {
       el.categoryBar.querySelectorAll('.nav-cat-item').forEach(btn => {
         const id = btn.dataset.cat;
@@ -624,7 +631,7 @@
         const count = topicCounts[t] || 0;
         const active = state.selectedTopic === t ? ' active' : '';
         return `
-          <div class="sh-graph-legend-item${active}" onclick="window.selectTopic('${escapeHtml(t)}')" style="--topic-accent:${col};" title="${escapeHtml(t)} — ${count} notes">
+          <div class="sh-graph-legend-item${active}" onclick="window.selectTopic('${escapeHtml(t)}'); if(typeof showGraphTopicCard === 'function') showGraphTopicCard('${escapeHtml(t)}');" style="--topic-accent:${col};" title="${escapeHtml(t)} — ${count} notes">
             <span class="legend-dot"></span>
             <span class="legend-label">${escapeHtml(t)}</span>
             <span class="legend-count">${count}</span>
@@ -709,13 +716,19 @@
         }
         if (node.isHub) {
           window.selectTopic(node.topic);
+          showGraphTopicCard(node.topic || node.name);
         } else {
           showGraphNodeCard(node);
         }
       },
       onNodeDoubleClick: (node) => {
-        if (node && !node.isHub && node.noteId) {
-          openNote(node.noteId);
+        if (node) {
+          if (node.isHub) {
+            window.selectTopic(node.topic || node.name);
+            window.switchView(state.currentLayout || 'card');
+          } else if (node.noteId) {
+            openNote(node.noteId);
+          }
         }
       }
     });
@@ -735,6 +748,47 @@
         edges: graph.edges
       }
     });
+  }
+
+  function showGraphTopicCard(topicName) {
+    if (!el.graphDetailsCard) return;
+    const tLower = (topicName || '').toLowerCase();
+    const topicNotes = state.notes.filter(n => 
+      (n.topic || '').toLowerCase() === tLower || 
+      (n.domain || '').toLowerCase() === tLower || 
+      (n.topicName || '').toLowerCase() === tLower
+    );
+    const sample = topicNotes[0];
+    const col = topicColor(sample && sample.domain);
+
+    const notesListHtml = topicNotes.slice(0, 8).map(n => `
+      <div class="graph-topic-note-item" onclick="window.openNoteById('${n.id}')" title="${escapeHtml(n.title)}">
+        <span class="graph-topic-note-title">📄 ${escapeHtml(n.title)}</span>
+        <span class="sh-type-pill">${escapeHtml(n.type || 'note')}</span>
+      </div>
+    `).join('');
+
+    const moreHtml = topicNotes.length > 8 
+      ? `<div class="graph-topic-more">+${topicNotes.length - 8} more notes</div>` 
+      : '';
+
+    el.graphDetailsCard.innerHTML = `
+      <div class="graph-detail-title">${escapeHtml(topicName)}</div>
+      <div class="graph-detail-badges">
+        <span class="sh-topic-badge" style="--topic-accent:${col};">${topicNotes.length} Notes</span>
+        <span class="sh-type-pill">Topic Hub</span>
+      </div>
+      <p class="graph-detail-summary">Topic cluster containing <strong>${topicNotes.length}</strong> knowledge assets.</p>
+      <div class="graph-topic-notes-list">
+        ${notesListHtml || '<div style="color:var(--text-muted); font-size:12px;">No notes found</div>'}
+        ${moreHtml}
+      </div>
+      <div class="graph-detail-actions">
+        <button class="btn-node-open" onclick="window.selectTopic('${escapeHtml(topicName)}'); window.switchView('card');">View Notes ↗</button>
+        <button class="btn-node-share" onclick="window.openShareModal('topic', '${escapeHtml(topicName)}')" title="Share & Ingest Topic">🔗</button>
+      </div>
+    `;
+    el.graphDetailsCard.classList.add('active');
   }
 
   function showGraphNodeCard(node) {
@@ -948,14 +1002,32 @@
     state.selectedTopic = topic || 'All';
 
     // If selecting a specific topic, check if current category contains this topic; if not, reset category to 'all' so notes are visible
-    if (state.selectedTopic !== 'All' && state.selectedCategory !== 'all') {
+    if (state.selectedTopic !== 'All') {
       const topicLower = state.selectedTopic.toLowerCase();
-      const hasMatchingNoteInCat = state.notes.some(n => 
-        (n.category || '').toLowerCase() === state.selectedCategory.toLowerCase() && 
-        ((n.topic || '').toLowerCase() === topicLower || (n.domain || '').toLowerCase() === topicLower || (n.topicName || '').toLowerCase() === topicLower)
-      );
-      if (!hasMatchingNoteInCat) {
-        state.selectedCategory = 'all';
+      if (state.selectedCategory !== 'all') {
+        const hasMatchingNoteInCat = state.notes.some(n => 
+          (n.category || '').toLowerCase() === state.selectedCategory.toLowerCase() && 
+          ((n.topic || '').toLowerCase() === topicLower || (n.domain || '').toLowerCase() === topicLower || (n.topicName || '').toLowerCase() === topicLower)
+        );
+        if (!hasMatchingNoteInCat) {
+          state.selectedCategory = 'all';
+        }
+      }
+
+      // Reset tag/type filters if they don't match any note in this topic to avoid empty list
+      if (state.selectedTag) {
+        const hasTagInTopic = state.notes.some(n =>
+          ((n.topic || '').toLowerCase() === topicLower || (n.domain || '').toLowerCase() === topicLower || (n.topicName || '').toLowerCase() === topicLower) &&
+          (n.tags || []).includes(state.selectedTag)
+        );
+        if (!hasTagInTopic) state.selectedTag = null;
+      }
+      if (state.selectedType !== 'All') {
+        const hasTypeInTopic = state.notes.some(n =>
+          ((n.topic || '').toLowerCase() === topicLower || (n.domain || '').toLowerCase() === topicLower || (n.topicName || '').toLowerCase() === topicLower) &&
+          (n.type || '').toLowerCase() === state.selectedType.toLowerCase()
+        );
+        if (!hasTypeInTopic) state.selectedType = 'All';
       }
     }
 
@@ -1223,10 +1295,10 @@
           <div>
             <div class="sh-card-top">
               <div class="sh-card-badges">
-                <span class="sh-badge-category">● ${escapeHtml(note.categoryName || categoryName(note.category))}</span>
-                <span class="sh-topic-badge">${escapeHtml(note.topic || '')}</span>
+                <span class="sh-badge-category" onclick="event.stopPropagation(); window.selectCategory('${escapeHtml(note.category || '')}')" title="Filter by category: ${escapeHtml(note.categoryName || categoryName(note.category))}">● ${escapeHtml(note.categoryName || categoryName(note.category))}</span>
+                <span class="sh-topic-badge" onclick="event.stopPropagation(); window.selectTopic('${escapeHtml(note.topic || '')}')" title="Filter by topic: ${escapeHtml(note.topic || '')}">${escapeHtml(note.topic || '')}</span>
               </div>
-              <span class="sh-type-pill">${escapeHtml(note.type || 'note')}</span>
+              <span class="sh-type-pill" onclick="event.stopPropagation(); window.selectType('${escapeHtml(note.type || '')}')" title="Filter by type: ${escapeHtml(note.type || '')}">${escapeHtml(note.type || 'note')}</span>
             </div>
             <h3 class="sh-card-title">${highlightedTitle}</h3>
             <p class="sh-card-snippet">${highlightedSummary}</p>
@@ -1286,9 +1358,9 @@
             <div class="sh-table-title">${highlightedTitle}</div>
             <div class="sh-table-path">${escapeHtml(note.relPath || '')}</div>
           </td>
-          <td class="col-category"><span class="sh-badge-category">● ${escapeHtml(note.categoryName || categoryName(note.category))}</span></td>
-          <td class="col-topic"><span class="sh-topic-badge">${escapeHtml(note.topic || '')}</span></td>
-          <td class="col-type"><span class="sh-type-pill">${note.type}</span></td>
+          <td class="col-category"><span class="sh-badge-category" onclick="event.stopPropagation(); window.selectCategory('${escapeHtml(note.category || '')}')" title="Filter by category">● ${escapeHtml(note.categoryName || categoryName(note.category))}</span></td>
+          <td class="col-topic"><span class="sh-topic-badge" onclick="event.stopPropagation(); window.selectTopic('${escapeHtml(note.topic || '')}')" title="Filter by topic">${escapeHtml(note.topic || '')}</span></td>
+          <td class="col-type"><span class="sh-type-pill" onclick="event.stopPropagation(); window.selectType('${escapeHtml(note.type || '')}')" title="Filter by type">${note.type}</span></td>
           <td class="col-tags">${tagsHtml}</td>
           <td class="col-updated">${note.updated}</td>
           <td class="col-actions">

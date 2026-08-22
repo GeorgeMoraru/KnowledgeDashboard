@@ -1512,6 +1512,16 @@ body.sidebar-collapsed .sidebar-collapse-toggle-btn {
   border: 1px solid color-mix(in srgb, var(--cat-accent, var(--accent-primary)) 35%, transparent);
 }
 
+.sh-badge-category, .sh-topic-badge, .sh-type-pill{
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
+}
+
+.sh-badge-category:hover, .sh-topic-badge:hover, .sh-type-pill:hover{
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
 .sh-topic-badge{
   font-size: 11px;
   font-weight: 700;
@@ -2381,6 +2391,49 @@ mark {
   background: var(--bg-surface-alt);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
+}
+
+.graph-topic-notes-list{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  margin: 8px 0 12px 0;
+  padding-right: 4px;
+}
+
+.graph-topic-note-item{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--bg-surface-alt);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-primary);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.graph-topic-note-item:hover{
+  background: var(--bg-card-hover);
+  color: var(--accent-primary);
+}
+
+.graph-topic-note-title{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.graph-topic-more{
+  font-size: 10.5px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 3px 0;
 }
 
 /* ==========================================================================
